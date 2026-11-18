@@ -1,0 +1,26 @@
+{"id": "T01", "type": "LIMIT-TIME", "exp": "不并", "K": "备份记忆库前先确认没有正在写入的进程", "D": "备份记忆库前先确认没有正在写入的进程，且只在凌晨低峰期做", "why": "drop 多出「只在凌晨低峰期」这一条时间限定，keeper 没有；并了会丢掉这个约束", "trivial": false}
+{"id": "T02", "type": "LIMIT-HOST", "exp": "不并", "K": "升级依赖后要重跑一次自检脚本", "D": "升级依赖后要重跑一次自检脚本——仅在有独立测试机的那台机器上", "why": "drop 多出宿主限定；keeper 无条件版更宽，并了会把「仅限某机」抹平", "trivial": false}
+{"id": "T03", "type": "LIMIT-COND", "exp": "不并", "K": "写日志时不要打印密钥", "D": "写日志时不要打印密钥，除非目标是本地仅自己可读的调试文件", "why": "drop 多出一个例外分支，keeper 是无例外版；并了等于删掉这个例外", "trivial": false}
+{"id": "T04", "type": "LIMIT-EXCEPT", "exp": "不并", "K": "提交前必须跑一遍格式化", "D": "提交前必须跑一遍格式化，纯文档改动的提交除外", "why": "drop 有豁免条款，keeper 没有；并了会把豁免吃掉", "trivial": false}
+{"id": "T05", "type": "POLARITY", "exp": "不并", "K": "不要为一次性任务新建定时任务", "D": "一次性任务也要新建定时任务，方便回看", "why": "同一动作一否一肯，并了会把禁令反过来", "trivial": false}
+{"id": "T06", "type": "POLARITY", "exp": "不并", "K": "禁止把 cookie 文件复制到别的目录", "D": "cookie 文件可以复制到临时目录使用", "why": "极性相反", "trivial": false}
+{"id": "T07", "type": "POLARITY", "exp": "不并", "K": "不要在群里 @ 全体成员", "D": "重要通知要在群里 @ 全体成员", "why": "极性相反", "trivial": false}
+{"id": "T08", "type": "POLARITY", "exp": "不并", "K": "不要自动删除超过 30 天的日志", "D": "超过 30 天的日志应当自动删除", "why": "极性相反", "trivial": false}
+{"id": "T09", "type": "OBJECT", "exp": "不并", "K": "每次改动 schema 前先做一次全量备份", "D": "每次改动索引前先做一次全量备份", "why": "对象不同（schema vs 索引），两条各自成立，并了会丢掉一条对象", "trivial": false}
+{"id": "T10", "type": "OBJECT", "exp": "不并", "K": "对外发消息前先确认收件人", "D": "对外发邮件前先确认收件人", "why": "渠道不同（消息 vs 邮件），是不同的规矩", "trivial": false}
+{"id": "T11", "type": "OBJECT", "exp": "不并", "K": "夜间任务不要碰生产库的写接口", "D": "夜间任务不要碰测试库的写接口", "why": "库不同", "trivial": false}
+{"id": "T12", "type": "OBJECT", "exp": "不并", "K": "给中文语料加场合标签", "D": "给英文语料加场合标签", "why": "语种不同，是两条独立规矩（尤其本库对英文有单独口径）", "trivial": false}
+{"id": "T13", "type": "VALUE", "exp": "不并", "K": "相似度阈值取 0.75 以上才进候选", "D": "相似度阈值取 0.85 以上才进候选", "why": "阈值不同，是两条不同判据，并了会让读数无法复现", "trivial": false}
+{"id": "T14", "type": "VALUE", "exp": "不并", "K": "切片长度用 10 分钟", "D": "切片长度用 6 分钟", "why": "参数不同", "trivial": false}
+{"id": "T15", "type": "VALUE", "exp": "不并", "K": "留存策略保留最近 90 天", "D": "留存策略保留最近 180 天", "why": "数值不同", "trivial": false}
+{"id": "T16", "type": "COMPRESS", "exp": "并", "K": "归档时必须包含 AGENTS.md 文件，并记录背景信息及遇到的问题", "D": "归档需含 AGENTS.md，记背景和问题", "why": "drop 是 keeper 的压缩版，缺的修饰都在 keeper 里，并了不丢信息", "trivial": false}
+{"id": "T17", "type": "COMPRESS", "exp": "并", "K": "不要将用户记忆中的命令误认为是实际存在的脚本或技能", "D": "不要将用户记忆里的命令当作真实存在的脚本", "why": "drop 少一个并列宾语（技能），主体约束相同；keeper 更全，应留 keeper", "trivial": false}
+{"id": "T18", "type": "COMPRESS", "exp": "并", "K": "做一个需要至少 5 次工具调用的真实小任务，例如读三个文件、汇总成一段结论", "D": "一个需要至少 5 次工具调用的真实小任务", "why": "drop 砍掉举例与动词，约束主体一致", "trivial": false}
+{"id": "T19", "type": "COMPRESS", "exp": "并", "K": "不要记一次性的操作步骤和进度状态", "D": "不要记一次性的操作步骤", "why": "drop 少一个并列项；keeper 更全，并了不丢信息", "trivial": false}
+{"id": "T20", "type": "NONENTRY", "exp": "不并", "K": "提交前必须跑一遍格式化", "D": "ok", "why": "纯确认词，不是条目；应被前置过滤器剔除，不许并进任何 keeper", "trivial": false}
+{"id": "T21", "type": "NONENTRY", "exp": "不并", "K": "对外发消息前先确认收件人", "D": "收到，已处理", "why": "回执语，不是条目", "trivial": false}
+{"id": "T22", "type": "NONENTRY", "exp": "不并", "K": "相似度阈值取 0.75 以上才进候选", "D": "？？", "why": "纯标点，不是条目", "trivial": false}
+{"id": "T23", "type": "NONENTRY", "exp": "不并", "K": "切片长度用 10 分钟", "D": "12345", "why": "纯数字，不是条目", "trivial": false}
+{"id": "T24", "type": "NONENTRY", "exp": "不并", "K": "夜间任务不要碰生产库的写接口", "D": "👍", "why": "纯表情，不是条目", "trivial": false}
+{"id": "C01", "type": "CANARY-NOTE", "exp": "不并", "K": "不要记一次性的操作步骤和进度状态", "D": "全批。", "why": "批注不是规则正文。dream-20261117 的 G09 就是这类被并进去过一次，canary 必须判不并", "trivial": false}
+{"id": "C02", "type": "CANARY-DIR", "exp": "不并", "K": "只在 Ubuntu 上跑蒸馏", "D": "只在 Ubuntu 上跑蒸馏，且必须在夜间空闲时跑", "why": "判据方向陷阱：drop 多一条限定 ⇒ 覆盖更窄 ⇒ 并了会丢。若席把「drop 缺词」当「不并」的理由，会在别处答反", "trivial": false}

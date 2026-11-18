@@ -1,0 +1,11 @@
+__pycache__/
+*.pyc
+build/
+dist/
+*.egg-info/
+*.bak-*
+*.db
+.DS_Store
+
+# Perch 本机脚手架（含家目录绝对路径，不外发）
+.perch/

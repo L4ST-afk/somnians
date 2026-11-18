@@ -1,0 +1,8 @@
+{"id": "a1", "text": "归档时必须包含 AGENTS.md 文件，并记录背景信息及遇到的问题", "is_deleted": false}
+{"id": "a2", "text": "归档时必须包含 AGENTS.md，记录背景问题和遇到的问题", "is_deleted": false}
+{"id": "a3", "text": "归档前先备份，命名用 .bak-日期-用途", "is_deleted": false}
+{"id": "b1", "text": "提交前必须跑一遍格式化", "is_deleted": false}
+{"id": "b2", "text": "提交前必须跑一遍格式化，纯文档改动的提交除外", "is_deleted": false}
+{"id": "c1", "text": "相似度阈值取 0.75 以上才进候选", "is_deleted": false}
+{"id": "c2", "text": "切片长度用 10 分钟", "is_deleted": false}
+{"id": "d1", "text": "全批。", "is_deleted": false}
