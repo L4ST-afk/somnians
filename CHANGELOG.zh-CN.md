@@ -2,6 +2,12 @@
 
 `[English](CHANGELOG.md) · [中文](CHANGELOG.zh-CN.md)`
 
+## 0.1.2（2026-11-18）
+
+- **数据文件去掉厂商名**：`data/recorded/perch.txt` → `seat-a.txt`，`qwen.txt` → `seat-b.txt`；`demo` 的席位行随之改为 `seat-a`／`seat-b`。读数不变（26/26、25/26）。
+- **题图上 README**：两版顶部加 `docs/cover.jpg`（作者自制）。
+- 无行为变更。
+
 ## 0.1.1 — 2026-11-18
 
 - **运行时三语目录**：英文／简体／繁体，选取顺序 `--lang` > `SOMNIANS_LANG` > `LC_ALL` / `LC_MESSAGES` / `LANGUAGE` / `LANG`，判不出落英文；`C`／`POSIX` 跳过。

@@ -9,6 +9,9 @@
 
 `[English](README.md) · [中文](README.zh-CN.md)`
 
+<img src="docs/cover.jpg" alt="蝶花半梦 · Viola Somnians — a pansy with four butterflies, watercolour on torn paper" width="720">
+
+
 **对已有记忆条目做存量去重**：扫同义候选 → 由你指定的席位逐对复判 → 单事务软删 → 按批一行回滚。全程留审计。
 
 mem0 / Zep / Letta 在写入那一刻就决定记不记。这一件处理另一摊：**已经沉淀下来的重复**——一批 3000 条里那些说了两遍、三遍、五遍的规矩。
@@ -37,10 +40,10 @@ somnians demo         # 离线复放两席已录判决：不联网、不需要�
 公开金标 26 组：CANARY×2、COMPRESS×4、LIMIT×4、NONENTRY×5、OBJECT×4、POLARITY×4、VALUE×3
 
 席位              准确率   方向反读   canary   判定
-perch(auto)      26/26     0.0%       全过     可用
-qwen3.8-flash    25/26     0.0%       全过     可用
+seat-a            26/26     0.0%       全过     可用
+seat-b            25/26     0.0%       全过     可用
 
-两席分歧 1 组：T10 —— perch 判不并（对），qwen 判并（抹平了「消息 vs 邮件」的渠道差异）
+两席分歧 1 组：T10 —— seat-a 判不并（对），seat-b 判并（抹平了「消息 vs 邮件」的渠道差异）。两席名字故意不写：这两行只声称「这两份判决在这套判据上的分数」，不声称谁家模型更强。
 ```
 
 **口径**：准确率＝与金标标签的一致率，分母 26（含 2 组 canary）；canary 任一不过则整份读数作废。它只是这两席在**这一套判据**上的可复现读数，跟「模型能力强弱」无关。

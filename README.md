@@ -11,6 +11,9 @@
 
 `[English](README.md) · [中文](README.zh-CN.md)`
 
+<img src="docs/cover.jpg" alt="蝶花半梦 · Viola Somnians — a pansy with four butterflies, watercolour on torn paper" width="720">
+
+
 mem0 / Zep / Letta decide at write time whether something gets stored. This tool handles a different pile: duplicates that have already settled in your store — the rule you wrote twice, three times, five times across 3,000 records.
 
 **The artifact is a CLI.** A library would need a host first; a prompt would need something that can run prompts. A CLI needs one line after install, and it prints numbers you can check. The seven subcommands are independent, so you can wire it into any store without changing yours.
@@ -36,10 +39,10 @@ somnians demo         # replays two seats' recorded verdicts offline: no network
 Public gold set, 26 cases: CANARY×2, COMPRESS×4, LIMIT×4, NONENTRY×5, OBJECT×4, POLARITY×4, VALUE×3
 
 seat             accuracy  reversed   canary   verdict
-perch(auto)      26/26     0.0%       all pass usable
-qwen3.8-flash    25/26     0.0%       all pass usable
+seat-a           26/26     0.0%       all pass usable
+seat-b           25/26     0.0%       all pass usable
 
-1 disagreement: T10 — perch says keep apart (correct); qwen merges it (flattens the channel difference between a message and an email)
+1 disagreement: T10 — seat-a keeps it apart (correct); seat-b merges it (flattens the channel difference between a message and an email). The two seats are unnamed on purpose: the rows only claim what these verdict sets score, not which vendor is better.
 ```
 
 **How to read it**: accuracy = agreement with the gold labels, denominator 26 (canaries included); if any canary fails, the whole reading is void. Change the seats or the corpus and these numbers move; the row only claims what these two seats score on **this criterion set**, reproducibly.

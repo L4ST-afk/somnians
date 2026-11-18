@@ -42,7 +42,7 @@ except ImportError:       # 直接 python3 src/somnians/cli.py 时
 HERE = os.path.dirname(os.path.abspath(__file__))
 DATA = os.environ.get("SOMNIANS_DATA") or os.path.join(HERE, "data")
 # 数据根可显式覆盖（SOMNIANS_DATA）；默认是包内 data，pip 安装后同样成立。
-SEATS = {"perch(auto)": "perch.txt", "qwen3.8-flash": "qwen.txt"}
+SEATS = {"seat-a": "seat-a.txt", "seat-b": "seat-b.txt"}
 
 # ---------------------------------------------------------------- 判据与解析
 
