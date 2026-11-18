@@ -1,5 +1,12 @@
 # somnians · 蝶花半梦（Viola Somnians）
 
+<!-- badges: 徽章行，别改成图片 alt 里的文字，CI 用它判「README 有徽章」 -->
+[![selfcheck](https://github.com/L4ST-afk/somnians/actions/workflows/selfcheck.yml/badge.svg)](https://github.com/L4ST-afk/somnians/actions/workflows/selfcheck.yml)
+[![PyPI](https://img.shields.io/pypi/v/somnians)](https://pypi.org/project/somnians/)
+[![Python](https://img.shields.io/pypi/pyversions/somnians)](https://pypi.org/project/somnians/)
+[![License](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
+
+
 **Deduplicate the memory you already have.** Scan for near-duplicates → have your own seat adjudicate each pair → soft-delete in one transaction → roll back one batch at a time. Every step leaves an audit trail.
 
 `[English](README.md) · [中文](README.zh-CN.md)`
@@ -8,7 +15,7 @@ mem0 / Zep / Letta decide at write time whether something gets stored. This tool
 
 **The artifact is a CLI.** A library would need a host first; a prompt would need something that can run prompts. A CLI needs one line after install, and it prints numbers you can check. The seven subcommands are independent, so you can wire it into any store without changing yours.
 
-**Naming**: Chinese name 蝶花半梦, Latin name *Viola Somnians* (pansy + dream). Commands and package name are `somnians` — the name is free on PyPI; `viola` was taken.
+**Naming**: Chinese name 蝶花半梦, Latin name *Viola Somnians* (pansy + dream). Commands and package name are `somnians` — it is now on PyPI; `viola` was taken.
 
 ```
 scan → candidate groups → seat verdicts (merge / keep apart) → apply (soft delete) → rollback (by batch)

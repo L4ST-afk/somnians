@@ -1,5 +1,12 @@
 # 蝶花半梦 · 存量去重（somnians · Viola Somnians）
 
+<!-- badges: 徽章行，别改成图片 alt 里的文字，CI 用它判「README 有徽章」 -->
+[![selfcheck](https://github.com/L4ST-afk/somnians/actions/workflows/selfcheck.yml/badge.svg)](https://github.com/L4ST-afk/somnians/actions/workflows/selfcheck.yml)
+[![PyPI](https://img.shields.io/pypi/v/somnians)](https://pypi.org/project/somnians/)
+[![Python](https://img.shields.io/pypi/pyversions/somnians)](https://pypi.org/project/somnians/)
+[![License](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
+
+
 `[English](README.md) · [中文](README.zh-CN.md)`
 
 **对已有记忆条目做存量去重**：扫同义候选 → 由你指定的席位逐对复判 → 单事务软删 → 按批一行回滚。全程留审计。
