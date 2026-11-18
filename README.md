@@ -6,16 +6,16 @@
 [![License](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 
 
-**Deduplicate the memory you already have.** Scan for near-duplicates → have your own seat adjudicate each pair → soft-delete in one transaction → roll back one batch at a time. Every step leaves an audit trail.
-
 `[English](README.md) · [中文](README.zh-CN.md)`
 
 <img src="docs/cover.jpg" alt="蝶花半梦 · Viola Somnians — a pansy with butterflies, watercolour on torn paper" width="720">
 
 
-mem0 / Zep / Letta decide at write time whether something gets stored. This tool handles a different pile: duplicates that have already settled in your store — the rule you wrote twice, three times, five times across 3,000 records.
+**This tool handles one thing only: duplicates that have already settled in.** The rule you wrote twice, three times, five times across 3,000 records — that pile. mem0 / Zep / Letta decide at write time whether something gets stored. This never touches the write path; it looks at what is already in the store, and at how many times the same sentence sits there.
 
-**The artifact is a CLI.** A library would need a host first; a prompt would need something that can run prompts. A CLI needs one line after install, and it prints numbers you can check. The seven subcommands are independent, so you can wire it into any store without changing yours.
+Four steps, and none of them can be skipped: scan for near-duplicates → your own seat adjudicates each pair → soft-delete in one transaction → roll back one batch at a time. Every step leaves an audit trail.
+
+**The artifact is a CLI, not a library.** A library would need a host first; a prompt would need something that can run prompts. A CLI needs one line after install, and it prints numbers you can check. The seven subcommands are independent, so you can wire it into any store without changing yours.
 
 **Naming**: Chinese name 蝶花半梦, Latin name *Viola Somnians* (pansy + dream). Commands and package name are `somnians` — it is now on PyPI; `viola` was taken.
 
@@ -25,6 +25,8 @@ scan → candidate groups → seat verdicts (merge / keep apart) → apply (soft
 ```
 
 ## Install, then read the numbers
+
+Read those two rows first. They are a self-test: change the seat or the criterion, print them again, and only then decide whether to trust the rest.
 
 ```bash
 pipx install .        # or pip install .
@@ -44,19 +46,21 @@ seat-b           25/26     0.0%       all pass usable
 1 disagreement: T10 — seat-a keeps it apart (correct); seat-b merges it (flattens the channel difference between a message and an email). The two seats are unnamed on purpose: the rows only claim what these verdict sets score, not which vendor is better.
 ```
 
-**How to read it**: accuracy = agreement with the gold labels, denominator 26 (canaries included); if any canary fails, the whole reading is void. Change the seats or the corpus and these numbers move; the row only claims what these two seats score on **this criterion set**, reproducibly.
+**How to read it**: accuracy = agreement with the gold labels, denominator 26 (canaries included); if any canary fails, the whole reading is void. Change the seats or the corpus and these numbers move; the row only claims what these two seats score on **this criterion set**, reproducibly — nothing about which model is stronger.
 
-Read those two rows as a self-test: change the seat or the criterion, print them again, and only then decide whether to trust the rest.
+That single T10 disagreement is worth a second look: the seat that merged it treated "message" and "email" as the same channel. That is exactly the class of thing the criterion below is built to stop.
 
 ## One criterion
 
-> **The cost of a merge = the information in `drop` that `keeper` does not have.**
+**The cost of a merge = the information in `drop` that `keeper` does not have.**
 
 - `drop` has **more** than `keeper` (a qualifier, an exception, a second object, a different value, an opposite tone) ⇒ **keep apart**
 - `drop` has **less** than `keeper` (abbreviated form, fragment, dropped modifier, different word order, one extra preposition) ⇒ **merge**
 - Opposite polarity (one forbids, one permits) ⇒ **keep apart**
 
-On top of that sits a **pre-filter** (structural, not semantic): annotations and status words, fragments under 8 characters with no predicate, pure punctuation/numbers/emoji, receipt chatter ⇒ not an entry at all; verdict "keep apart" and **list them by name**. Skipping this layer backfires: something like `全批。` ("approve the whole batch") has no information to lose, so the criterion would say "merge", and merging it into a keeper only pollutes the text.
+On top of that sits a **pre-filter** (structural, not semantic): annotations and status words, fragments under 8 characters with no predicate, pure punctuation/numbers/emoji, receipt chatter ⇒ not an entry at all; verdict "keep apart" and **list them by name**.
+
+This layer cannot be skipped. Something like `全批。` ("approve the whole batch") would read as "merge" under the criterion above, because it has no information to lose — and merging it into a keeper only pollutes the text.
 
 ## Three contracts, and nothing else
 
@@ -122,7 +126,7 @@ Two surfaces stay out of scope on purpose: the seat brief written by `adjudicate
 
 ## The order inside `apply`, and what a half-way break leaves behind
 
-A torn state — store updated, file not updated — hurts more than a crash, so the order is fixed:
+A torn state — store updated, file not updated — hurts more than a crash. So the order is fixed, and it is not negotiable:
 
 ```
 ① back up + read back + compare hash   ② write a staging file (original untouched)
@@ -137,7 +141,7 @@ Both breakpoints have a recovery path that `selfcheck` exercises:
 | after ④, before ⑤ | file merged, store has no audit row | `somnians recover` writes the audit from the journal; `rollback` then works normally |
 | after ③, before ④ | file untouched, journal present | `somnians recover` decides "never took effect", drops the journal, changes nothing |
 
-`recover` looks at the **file's actual state**, not at whether a journal exists. Journal present, rename not done → no audit to write.
+`recover` looks at one thing only: **whether the file was actually renamed**. Journal present, rename not done → no audit to write.
 
 `rollback` uses the same staging discipline: it fsyncs the complete restored JSONL before atomically replacing the records file, then commits the audit transaction. If an ordinary pre-commit error occurs, it rolls back SQLite and atomically restores the original file. A batch that already has an `op=rollback` audit row is a no-op on repeat. This protects handled errors; it is not a crash-recovery journal for rollback.
 
@@ -153,11 +157,13 @@ curl -s https://your-endpoint/v1/chat/completions \
 | python3 -c 'import json,sys;print(json.load(sys.stdin)["choices"][0]["message"]["content"])'
 ```
 
-**You fill in the model.** That is where vendor decoupling lives: the protocol is "one brief in, n lines of `ID｜并`/`ID｜不并` out", and who answers is not baked into the repo.
+**You fill in the model yourself.** That is where vendor decoupling lives: one brief goes in, n lines of `ID｜并`/`ID｜不并` come out, and who answers it is not baked into the repo.
 
 ## Why the default threshold is 0.62, not 0.75
 
-Records are short. A near-duplicate that differs by one character or two drops to around 0.5 under 3-gram Jaccard. So the score is `max(3-gram Jaccard, character-sequence similarity)` and the threshold stays low to collect more candidates. **Scan over-collects (recall); the seat rejects (precision)** — a two-stage split that one threshold cannot replace.
+Records are short. A near-duplicate that differs by one character or two drops to around 0.5 under 3-gram Jaccard. So the score is `max(3-gram Jaccard, character-sequence similarity)` and the threshold stays low to collect more candidates.
+
+**Scan over-collects; the seat rejects.** A two-stage split that one threshold cannot replace.
 
 ## Large stores: inverted index, plus a ruler you can re-run
 
@@ -176,7 +182,9 @@ python3 scripts/make_bench.py --n 3120 > /tmp/bench.jsonl    # the synthetic row
 ./somnians scan --in /tmp/bench.jsonl --out /tmp/b.jsonl             # inverted
 ```
 
-`--exact` is the ruler: **re-check any speed-up against it**; a speed-up without that row is not a result. `--cap` (default 500) is the high-frequency gate — a 3-gram whose posting list is longer than that stops contributing pairs, and **the moment it triggers, a warning is printed**: the real store's largest posting list is 362, so nothing was skipped; the synthetic distribution does skip, and there `--exact` or a bigger `--cap` is the only honest answer.
+`--exact` is the ruler: re-check any speed-up against it. A speed-up without that row is not a result.
+
+`--cap` (default 500) is the high-frequency gate — a 3-gram whose posting list is longer than that stops contributing pairs, and **the moment it triggers, a warning is printed**: the real store's largest posting list is 362, so nothing was skipped; the synthetic distribution does skip, and there `--exact` or a bigger `--cap` is the only honest answer.
 
 ## What this does not do
 
@@ -197,6 +205,7 @@ verdicts 2/2 groups → decisions.jsonl
 ```
 
 When retries run out and groups are still missing: **exit code 2**, and those groups are written as `未判` (undecided) in decisions — never silently recorded as "keep apart".
+
 `--jobs 3` splits candidates by group and dispatches concurrently; the seats do not affect each other. A single seat's timeout is handled by `--timeout`.
 
 ## Files
