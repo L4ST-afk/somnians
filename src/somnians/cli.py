@@ -630,6 +630,10 @@ def cmd_rollback(args):
 # ---------------------------------------------------------------- selfcheck
 
 
+def _selfcheck_line(cond, msg):
+    print(("[OK] " if cond else "[FAIL] ") + msg)
+
+
 def cmd_selfcheck(args):
     import contextlib
     import io
@@ -639,7 +643,7 @@ def cmd_selfcheck(args):
 
     def line(cond, msg):
         nonlocal ok
-        print(("✓ " if cond else "✗ ") + msg)
+        _selfcheck_line(cond, msg)
         ok = ok and bool(cond)
 
     cases_path = os.path.join(DATA, "public-cases.jsonl")
