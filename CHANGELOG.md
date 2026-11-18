@@ -2,6 +2,13 @@
 
 `[English](CHANGELOG.md) · [中文](CHANGELOG.zh-CN.md)`
 
+## 0.1.3 — 2026-11-18
+
+- **`rollback` persistence hardened**: it writes the complete restored JSONL and fsyncs it, atomically replaces the records file, then commits the audit transaction. An ordinary pre-commit error rolls SQLite back and atomically restores the original file; a batch that already carries an `op=rollback` row is a no-op on repeat. `rollback` itself still has no crash-recovery journal, and the README keeps saying so.
+- **Cross-platform CI**: the matrix is Ubuntu 24.04 / macOS / Windows × Python 3.9 / 3.11 / 3.13, plus a `quality-gate` job that fails unless every matrix job passes. `demo` and `selfcheck` output no longer breaks on consoles that cannot encode the symbols it prints (cp1252 and friends); the synthetic benchmark and its timings reproduce on Windows.
+- **Tests**: `tests/test_cli.py` (standalone unit tests) and `scripts/check_bench.py` (indexed-vs-exact reconciliation).
+- **Docs**: both READMEs rewritten so each section opens with the claim it makes; new cover art (L4ST-afk); internal branch names and private paths removed.
+
 ## 0.1.2
 
 - **Data files dropped their vendor names**: the recorded verdicts are now `data/recorded/seat-a.txt` / `seat-b.txt` (previously named after the two vendors), and `demo` prints seats as `seat-a` / `seat-b`. Readings unchanged (26/26, 25/26).

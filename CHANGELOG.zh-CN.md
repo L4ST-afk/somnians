@@ -2,6 +2,13 @@
 
 `[English](CHANGELOG.md) · [中文](CHANGELOG.zh-CN.md)`
 
+## 0.1.3（2026-11-18）
+
+- **`rollback` 持久性加固**：先把完整还原后的 JSONL 写入并 fsync，再原子替换记录文件，最后提交审计事务。提交前的普通错误会回滚 SQLite 并原子恢复原文件；已带 `op=rollback` 审计记录的批次重复执行是 no-op。`rollback` 本身仍没有崩溃恢复日志，README 照旧明写这一条。
+- **跨平台 CI**：矩阵为 Ubuntu 24.04／macOS／Windows × Python 3.9／3.11／3.13，另设 `quality-gate`：任一组合失败即整体红。`demo` 与 `selfcheck` 的输出不再在编码不全的控制台（cp1252 等）上中断；合成压测数据与耗时口径可在 Windows 复现。
+- **测试**：新增 `tests/test_cli.py`（独立单元测试）与 `scripts/check_bench.py`（倒排与全量对账脚本）。
+- **文档**：中英 README 重排为「每节先给结论」的结构；题图换新（作者自制）；删掉内部分支代号与私有路径。
+
 ## 0.1.2（2026-11-18）
 
 - **数据文件去掉厂商名**：两份已录判决改为 `data/recorded/seat-a.txt`／`seat-b.txt`（此前按两家厂商命名）；`demo` 的席位行随之改为 `seat-a`／`seat-b`。读数不变（26/26、25/26）。
