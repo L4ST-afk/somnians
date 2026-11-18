@@ -77,6 +77,12 @@ CATALOG = {
                        "⇒ journal discarded, no audit to backfill",
         "rec.backfill": "Batch {batch}: file renamed but the database never committed ⇒ "
                         "backfilled {n} audit row(s); rollback works again",
+        "rec.already": "Batch {batch}: audit already committed ({n} row(s)) ⇒ journal dropped, "
+                       "nothing rewritten (idempotent)",
+        "rec.refuse": "Batch {batch}: the records file matches neither the pre- nor the post-apply "
+                      "fingerprint ⇒ state unknown; no audit written, journal kept at {jpath}",
+        "rec.legacy": "Batch {batch}: journal has no fingerprints (older format) ⇒ falling back to "
+                      "is_deleted, which is weaker evidence",
         "rb.none": "Batch {batch} has no soft-delete rows; nothing changed",
         "rb.already": "Batch {batch} has already been rolled back; nothing changed",
         "rb.fault": "Injected rollback failure; the records file and audit were restored",
@@ -153,6 +159,10 @@ CATALOG = {
         "rec.none": "无日志 {jpath}：没有待恢复的批次",
         "rec.discard": "批次 {batch}：文件尚未换名，{n} 条未生效 ⇒ 丢弃日志，无需补审计",
         "rec.backfill": "批次 {batch}：文件已换名但库未提交 ⇒ 补回审计 {n} 条，可正常 rollback",
+        "rec.already": "批次 {batch}：审计已提交（{n} 条）⇒ 只丢日志，不重复写（幂等）",
+        "rec.refuse": "批次 {batch}：文件既不匹配改动前、也不匹配改动后的指纹 ⇒ 状态不明；"
+                      "不写审计、不删日志（{jpath}）",
+        "rec.legacy": "批次 {batch}：日志无指纹（旧格式）⇒ 退回按 is_deleted 判，证据较弱",
         "rb.none": "批次 {batch} 无软删记录，未改动",
         "rb.already": "批次 {batch} 已回滚，未改动",
         "rb.fault": "注入回滚故障；记录文件与审计均已恢复",
@@ -221,6 +231,10 @@ CATALOG = {
         "rec.none": "無日誌 {jpath}：沒有待還原的批次",
         "rec.discard": "批次 {batch}：檔案尚未換名，{n} 條未生效 ⇒ 丟棄日誌，無需補審計",
         "rec.backfill": "批次 {batch}：檔案已換名但庫未提交 ⇒ 補回審計 {n} 條，可正常 rollback",
+        "rec.already": "批次 {batch}：審計已提交（{n} 條）⇒ 只丟日誌，不重複寫（冪等）",
+        "rec.refuse": "批次 {batch}：檔案既不匹配改動前、也不匹配改動後的指紋 ⇒ 狀態不明；"
+                      "不寫審計、不刪日誌（{jpath}）",
+        "rec.legacy": "批次 {batch}：日誌無指紋（舊格式）⇒ 退回按 is_deleted 判，證據較弱",
         "rb.none": "批次 {batch} 無軟刪記錄，未改動",
         "rb.already": "批次 {batch} 已回滾，未改動",
         "rb.fault": "注入回滾故障；記錄檔與審計均已恢復",

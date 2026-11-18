@@ -136,5 +136,108 @@ class CliBehaviorTests(unittest.TestCase):
             self.assertEqual(self.audit_counts(db), (1, 0))
 
 
+    def write_records(self, path, records):
+        path.write_text(
+            "".join(json.dumps(r, ensure_ascii=False) + "\n" for r in records),
+            encoding="utf-8",
+        )
+
+    def write_journal(self, records, batch, pre_sha, post_sha):
+        journal = Path(str(records) + f".journal-{batch}")
+        journal.write_text(json.dumps({
+            "batch": batch,
+            "pre_sha": pre_sha,
+            "post_sha": post_sha,
+            "merges": [{"old": "drop", "keeper": "keeper", "score": 0.9,
+                        "undo": {"id": "drop", "text": "A record to fold in", "is_deleted": False}}],
+        }, ensure_ascii=False), encoding="utf-8")
+        return journal
+
+    def run_recover(self, records, db, batch):
+        with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
+            return cli.cmd_recover(Namespace(
+                records=str(records), db=str(db), batch=batch, journal=None,
+            ))
+
+    def soft_delete_rows(self, db, batch):
+        con = cli._db(str(db))
+        rows = (
+            con.execute("SELECT COUNT(*) FROM audit_change WHERE op='soft_delete' AND batch=?",
+                        (batch,)).fetchone()[0],
+            con.execute("SELECT COUNT(*) FROM audit_merge WHERE batch=?", (batch,)).fetchone()[0],
+        )
+        con.close()
+        return rows
+
+    def test_recover_discards_when_file_still_matches_pre_fingerprint(self):
+        """删标记在操作前就是 true 的老记录：按标记判会读成「已生效」，按指纹判才对。"""
+        with tempfile.TemporaryDirectory() as directory:
+            records = Path(directory) / "records.jsonl"
+            self.write_records(records, [
+                {"id": "keeper", "text": "Keeper", "is_deleted": False},
+                {"id": "drop", "text": "A record to fold in", "is_deleted": True},
+            ])
+            db = Path(directory) / "audit.db"
+            pre = cli._sha256_bytes(records.read_bytes())
+            journal = self.write_journal(records, "b1", pre, "0" * 64)
+
+            self.assertEqual(self.run_recover(records, db, "b1"), 0)
+            self.assertFalse(journal.exists())
+            self.assertEqual(self.soft_delete_rows(db, "b1"), (0, 0))
+
+    def test_recover_backfills_when_file_matches_post_fingerprint(self):
+        with tempfile.TemporaryDirectory() as directory:
+            records = Path(directory) / "records.jsonl"
+            self.write_records(records, [
+                {"id": "keeper", "text": "Keeper", "is_deleted": False},
+                {"id": "drop", "text": "A record to fold in", "is_deleted": True,
+                 "merged_into": "keeper"},
+            ])
+            db = Path(directory) / "audit.db"
+            journal = self.write_journal(records, "b1", "0" * 64,
+                                         cli._sha256_bytes(records.read_bytes()))
+
+            self.assertEqual(self.run_recover(records, db, "b1"), 0)
+            self.assertFalse(journal.exists())
+            self.assertEqual(self.soft_delete_rows(db, "b1"), (1, 1))
+
+    def test_recover_is_idempotent_when_audit_already_committed(self):
+        with tempfile.TemporaryDirectory() as directory:
+            records = Path(directory) / "records.jsonl"
+            self.write_records(records, [
+                {"id": "keeper", "text": "Keeper", "is_deleted": False},
+                {"id": "drop", "text": "A record to fold in", "is_deleted": True,
+                 "merged_into": "keeper"},
+            ])
+            db = Path(directory) / "audit.db"
+            con = cli._db(str(db))
+            con.execute("INSERT INTO audit_merge VALUES(?,?,?,?,?,?)",
+                        ("drop", "keeper", "b1", 0.9, "batch", "now"))
+            con.execute("INSERT INTO audit_change(entry_id,op,batch,undo_json,created_at) "
+                        "VALUES(?,?,?,?,?)",
+                        ("drop", "soft_delete", "b1",
+                         json.dumps({"id": "drop", "text": "A record to fold in",
+                                     "is_deleted": False}), "now"))
+            con.commit()
+            con.close()
+            journal = self.write_journal(records, "b1", "0" * 64,
+                                         cli._sha256_bytes(records.read_bytes()))
+
+            self.assertEqual(self.run_recover(records, db, "b1"), 0)
+            self.assertFalse(journal.exists())
+            self.assertEqual(self.soft_delete_rows(db, "b1"), (1, 1))
+
+    def test_recover_refuses_to_guess_when_file_matches_neither(self):
+        with tempfile.TemporaryDirectory() as directory:
+            records = Path(directory) / "records.jsonl"
+            self.write_records(records, [{"id": "keeper", "text": "Keeper"}])
+            db = Path(directory) / "audit.db"
+            journal = self.write_journal(records, "b1", "1" * 64, "2" * 64)
+
+            self.assertEqual(self.run_recover(records, db, "b1"), 5)
+            self.assertTrue(journal.exists())
+            self.assertEqual(self.soft_delete_rows(db, "b1"), (0, 0))
+
+
 if __name__ == "__main__":
     unittest.main()

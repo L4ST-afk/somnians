@@ -141,7 +141,7 @@ Both breakpoints have a recovery path that `selfcheck` exercises:
 | after ④, before ⑤ | file merged, store has no audit row | `somnians recover` writes the audit from the journal; `rollback` then works normally |
 | after ③, before ④ | file untouched, journal present | `somnians recover` decides "never took effect", drops the journal, changes nothing |
 
-`recover` looks at one thing only: **whether the file was actually renamed**. Journal present, rename not done → no audit to write.
+`recover` trusts fingerprints, not `is_deleted`: the journal records the sha256 of the file before and after the batch. Equals the "after" hash ⇒ the file was renamed and the audit is missing ⇒ backfill. Equals the "before" hash ⇒ nothing took effect ⇒ drop the journal. Neither ⇒ unknown state: write nothing, delete nothing, exit code 5. If the batch's audit rows are already committed, it only drops the journal — running it again is a no-op.
 
 `rollback` uses the same staging discipline: it fsyncs the complete restored JSONL before atomically replacing the records file, then commits the audit transaction. If an ordinary pre-commit error occurs, it rolls back SQLite and atomically restores the original file. A batch that already has an `op=rollback` audit row is a no-op on repeat. This protects handled errors; it is not a crash-recovery journal for rollback.
 

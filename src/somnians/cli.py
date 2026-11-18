@@ -387,18 +387,22 @@ def cmd_apply(args):
         return 3
     print(t("apply.backup_ok", bak=bak, sha=digest[:12]))
 
-    # ② 先落暂存文件（不碰原文件）
+    # ② 先落暂存文件（不碰原文件）。payload 只序列化一次，正文与指纹同源
     staged = f"{args.records}.tmp-{batch}"
+    payload = "".join(json.dumps(r, ensure_ascii=False) + "\n" for r in recs)
+    post_sha = hashlib.sha256(payload.encode("utf-8")).hexdigest()
     with open(staged, "w", encoding="utf-8") as f:
-        for r in recs:
-            f.write(json.dumps(r, ensure_ascii=False) + "\n")
+        f.write(payload)
         f.flush()
         os.fsync(f.fileno())
 
-    # ③ 写日志（崩溃恢复的唯一依据）：文件换了/库没提，靠它补齐
+    # ③ 写日志（崩溃恢复的唯一依据）：文件换了/库没提，靠它补齐。
+    #    日志带改动前/后的文件指纹：recover 只比指纹，不看 is_deleted
+    #    （那条记录在本次操作之前可能已经被软删过，按标记判会读错）。
     jpath = _journal_path(args.records, batch)
     with open(jpath, "w", encoding="utf-8") as f:
         json.dump({"batch": batch, "db": os.path.abspath(args.db),
+                   "pre_sha": digest, "post_sha": post_sha,
                    "merges": [{"old": m[0], "keeper": m[1], "score": m[2],
                                "undo": json.loads(m[4])} for m in merged]},
                   f, ensure_ascii=False)
@@ -440,22 +444,60 @@ def cmd_apply(args):
     return 0
 
 
+def _sha256_bytes(data):
+    return hashlib.sha256(data).hexdigest()
+
+
 def cmd_recover(args):
-    """崩溃恢复：日志在、库没提 ⇒ 按文件真实状态补审计或丢弃日志。"""
+    """崩溃恢复：日志在 ⇒ 按**文件指纹**判这次 apply 到底生效没有。
+
+    三件事按顺序做，顺序不能换：
+    1. 审计已提交（同批已有 soft_delete 行）⇒ 只删日志，不重复写（重复执行幂等）。
+    2. 文件指纹 == 改动后 ⇒ 已换名、库没提 ⇒ 补审计。
+    3. 文件指纹 == 改动前 ⇒ 从未生效 ⇒ 丢弃日志。
+    两条都不匹配 ⇒ 状态不明，不写审计、不删日志，退出码 5。
+    旧日志没有指纹时才退回按 is_deleted 判，并明说证据较弱。
+    """
     jpath = args.journal or _journal_path(args.records, args.batch)
     if not os.path.exists(jpath):
         print(t("rec.none", jpath=jpath))
         return 0
     j = json.load(open(jpath, encoding="utf-8"))
-    recs = [json.loads(x) for x in open(args.records, encoding="utf-8") if x.strip()]
-    state = {r["id"]: bool(r.get("is_deleted")) for r in recs}
-    touched = [m for m in j["merges"] if state.get(m["old"])]
     con = _db(args.db)
-    if not touched:
+    done = con.execute(
+        "SELECT COUNT(*) FROM audit_change WHERE batch=? AND op='soft_delete'",
+        (j["batch"],)).fetchone()[0]
+    if done:
         con.close()
         os.unlink(jpath)
-        print(t("rec.discard", batch=j["batch"], n=len(j["merges"])))
+        print(t("rec.already", batch=j["batch"], n=done))
         return 0
+
+    pre, post = j.get("pre_sha"), j.get("post_sha")
+    if not (pre and post):
+        recs = [json.loads(x) for x in open(args.records, encoding="utf-8") if x.strip()]
+        state = {r["id"]: bool(r.get("is_deleted")) for r in recs}
+        touched = [m for m in j["merges"] if state.get(m["old"])]
+        if not touched:
+            con.close()
+            os.unlink(jpath)
+            print(t("rec.discard", batch=j["batch"], n=len(j["merges"])))
+            return 0
+        print(t("rec.legacy", batch=j["batch"]))
+    else:
+        now_sha = _sha256_bytes(open(args.records, "rb").read())
+        if now_sha == post:
+            touched = j["merges"]
+        elif now_sha == pre:
+            con.close()
+            os.unlink(jpath)
+            print(t("rec.discard", batch=j["batch"], n=len(j["merges"])))
+            return 0
+        else:
+            con.close()
+            print(t("rec.refuse", batch=j["batch"], jpath=jpath), file=sys.stderr)
+            return 5
+
     now = time.strftime("%Y-%m-%dT%H:%M:%S")
     with con:
         for m in touched:
