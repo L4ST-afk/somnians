@@ -8,7 +8,7 @@
 
 `[English](README.md) · [中文](README.zh-CN.md)`
 
-<img src="docs/cover.jpg" alt="蝶花半梦 · Viola Somnians — a pansy with four butterflies, watercolour on torn paper" width="720">
+<img src="docs/cover.jpg" alt="蝶花半梦 · Viola Somnians — a pansy with butterflies, watercolour on torn paper" width="720">
 
 
 **对已有记忆条目做存量去重**：扫同义候选 → 由你指定的席位逐对复判 → 单事务软删 → 按批一行回滚。全程留审计。

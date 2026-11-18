@@ -10,7 +10,7 @@
 
 `[English](README.md) · [中文](README.zh-CN.md)`
 
-<img src="docs/cover.jpg" alt="蝶花半梦 · Viola Somnians — a pansy with four butterflies, watercolour on torn paper" width="720">
+<img src="docs/cover.jpg" alt="蝶花半梦 · Viola Somnians — a pansy with butterflies, watercolour on torn paper" width="720">
 
 
 mem0 / Zep / Letta decide at write time whether something gets stored. This tool handles a different pile: duplicates that have already settled in your store — the rule you wrote twice, three times, five times across 3,000 records.
