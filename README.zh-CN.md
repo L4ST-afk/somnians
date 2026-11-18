@@ -160,7 +160,7 @@ curl -s https://your-endpoint/v1/chat/completions \
 | python3 -c 'import json,sys;print(json.load(sys.stdin)["choices"][0]["message"]["content"])'
 ```
 
-**模型你自己填。** 协议就一句：一份 brief 进，n 行 `ID｜并` 出。谁接，不写死。
+**模型你自己填。** 这也正是它跟厂商解耦的地方：协议就一句——一份 brief 进，n 行 `ID｜并` 出，谁接，不写死。
 
 ## 为什么阈值默认 0.62 而不是 0.75
 

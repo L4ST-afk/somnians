@@ -157,7 +157,7 @@ curl -s https://your-endpoint/v1/chat/completions \
 | python3 -c 'import json,sys;print(json.load(sys.stdin)["choices"][0]["message"]["content"])'
 ```
 
-**You fill in the model yourself.** The protocol is one sentence: one brief goes in, n lines of `ID｜并`/`ID｜不并` come out. Who answers it is not baked into the repo.
+**You fill in the model yourself.** That is where vendor decoupling lives: one brief goes in, n lines of `ID｜并`/`ID｜不并` come out, and who answers it is not baked into the repo.
 
 ## Why the default threshold is 0.62, not 0.75
 
