@@ -2,6 +2,12 @@
 
 `[English](CHANGELOG.md) · [中文](CHANGELOG.zh-CN.md)`
 
+## 0.1.4 — 2026-11-18
+
+- **`recover` decides by file fingerprints**: the journal records the sha256 of the records file before and after the batch. `recover` compares the file against both — equals the "after" hash ⇒ the rename happened and the audit is missing ⇒ backfill; equals the "before" hash ⇒ nothing took effect ⇒ drop the journal; neither ⇒ unknown state, nothing written and nothing deleted, exit code 5. This replaces the old `is_deleted` test, which read a record that was already soft-deleted before the batch as proof the apply had landed.
+- **Recovery is idempotent**: when the batch's `audit_change` rows are already committed, `recover` only deletes the journal and writes nothing, so an interrupted recovery can be rerun safely. Journals written before 0.1.4 carry no fingerprints; those fall back to the old check and say in the output that the evidence is weaker.
+- **Tests**: four new cases in `tests/test_cli.py` (9 total) — a pre-existing soft delete, backfill on the "after" hash, an idempotent rerun, and a refusal on an unrecognised file.
+
 ## 0.1.3 — 2026-11-18
 
 - **`rollback` persistence hardened**: it writes the complete restored JSONL and fsyncs it, atomically replaces the records file, then commits the audit transaction. An ordinary pre-commit error rolls SQLite back and atomically restores the original file; a batch that already carries an `op=rollback` row is a no-op on repeat. `rollback` itself still has no crash-recovery journal, and the README keeps saying so.
