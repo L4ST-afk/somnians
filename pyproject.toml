@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "somnians"
-version = "0.1.4"
+version = "0.1.5"
 description = "In-place deduplication for agent memory: scan, adjudicate, soft-delete in one transaction, roll back by batch"
 readme = "README.md"
 authors = [{ name = "L4ST-afk" }]

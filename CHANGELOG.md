@@ -2,6 +2,11 @@
 
 `[English](CHANGELOG.md) · [中文](CHANGELOG.zh-CN.md)`
 
+## 0.1.5 — 2026-11-18
+
+- **Windows keeps CRLF files intact**: `apply` now hashes and backs up the records file as raw bytes. Before, it read and rewrote the file as text, so a CRLF file lost its line endings on the way through and the backup digest never matched the rewritten digest — `selfcheck` failed on files that were fine. The same byte-level rule now covers the staged file and the fingerprint written into the journal, so `recover` compares like with like.
+- **Tests**: two new cases in `tests/test_cli.py` (11 total) — a CRLF file recovered before the batch lands, and a CRLF file whose records are backfilled from the written bytes. Both run the same interruption path as the LF cases.
+
 ## 0.1.4 — 2026-11-18
 
 - **`recover` decides by file fingerprints**: the journal records the sha256 of the records file before and after the batch. `recover` compares the file against both — equals the "after" hash ⇒ the rename happened and the audit is missing ⇒ backfill; equals the "before" hash ⇒ nothing took effect ⇒ drop the journal; neither ⇒ unknown state, nothing written and nothing deleted, exit code 5. This replaces the old `is_deleted` test, which read a record that was already soft-deleted before the batch as proof the apply had landed.
