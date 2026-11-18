@@ -1,12 +1,12 @@
 # Changelog
 
+`[English](CHANGELOG.md) · [中文](CHANGELOG.zh-CN.md)`
+
 ## 0.1.2
 
-- **Data files lost their vendor names**: `data/recorded/perch.txt` → `seat-a.txt`, `qwen.txt` → `seat-b.txt`; `demo` now prints seats as `seat-a` / `seat-b`. Readings unchanged (26/26, 25/26).
+- **Data files dropped their vendor names**: the recorded verdicts are now `data/recorded/seat-a.txt` / `seat-b.txt` (previously named after the two vendors), and `demo` prints seats as `seat-a` / `seat-b`. Readings unchanged (26/26, 25/26).
 - **Cover image** at the top of both READMEs (`docs/cover.jpg`, L4ST-afk).
 - No behaviour change.
-
-`[English](CHANGELOG.md) · [中文](CHANGELOG.zh-CN.md)`
 
 ## 0.1.1 — 2026-11-18
 

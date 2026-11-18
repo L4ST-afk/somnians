@@ -38,9 +38,9 @@ Four hard rules:
 3. **Keep the two languages in step.** English is canonical (`README.md`, `CONTRIBUTING.md`, `CHANGELOG.md`); the Chinese originals are the same names with `.zh-CN.md`. Change one side only and the other becomes a stale reading.
 4. **Runtime copy lives in three catalogs, and protocol values are never translated.** `src/somnians/i18n.py` carries `en` / `zh-Hans` / `zh-Hant`; add a key to all three in the same edit (`selfcheck` fails on any gap). Verdict values `并` / `不并` / `未判`, the `SELFCHECK_*` tokens, numbers, IDs, paths and exit codes stay byte-identical in every language: translating them breaks every store already written.
 
-## Document conventions (borrowed from 太玉洞, 2026-11-18)
+## Document conventions
 
-Four habits, taken from the skill-library writing gate: **failure first, a four-character H1 label, a size budget, and decay signals**.
+Four habits: **failure first, a four-character H1 label, a size budget, and decay signals**.
 
 - **H1 form**: `# <name> · <four-character label>`, e.g. `# 蝶花半梦 · 存量去重` / `# 蝶花半梦 · 贡献规范`. The label is shelf-readable only — not part of the package name, not indexed.
 - **Failure first**: before writing a rule, write the failure it exists to prevent — which version, what context was missing, what a redo would change. The README's closing section is where those failures live.
@@ -57,4 +57,4 @@ python3 scripts/make_bench.py --n 400 > /tmp/b.jsonl && ./somnians scan --in /tm
 - A criterion change must come with its `selfcheck` case, or it did not happen (let the case go red first, then green).
 - New subcommand: verb name, one line in `--help`, and the README's seven-subcommand section plus the file tree in the same commit.
 - New dependency: this repo is zero-dependency by default; adding one means explaining why the standard library is not enough.
-- Copy changes: run the English text through `fluensand check --doc` (浮沙言) and update the Chinese side in the same commit. ⛔ Change tone only — never numbers or thresholds while you are there.
+- Copy changes: change the tone only, never numbers or thresholds, and update the Chinese side in the same commit.

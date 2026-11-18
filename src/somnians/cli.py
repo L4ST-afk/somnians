@@ -11,7 +11,7 @@
   apply       单事务软删 + 写审计表
   rollback    按批一行还原
   recover     apply 断在半路时的恢复（按文件真实状态判定）
-  selfcheck   13 项离线自检
+  selfcheck   15 项离线自检
 
 契约（JSONL，不碰你的库）：
   records.jsonl   {"id":"...","text":"...","is_deleted":false}

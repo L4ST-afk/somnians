@@ -4,7 +4,7 @@
 
 ## 0.1.2（2026-11-18）
 
-- **数据文件去掉厂商名**：`data/recorded/perch.txt` → `seat-a.txt`，`qwen.txt` → `seat-b.txt`；`demo` 的席位行随之改为 `seat-a`／`seat-b`。读数不变（26/26、25/26）。
+- **数据文件去掉厂商名**：两份已录判决改为 `data/recorded/seat-a.txt`／`seat-b.txt`（此前按两家厂商命名）；`demo` 的席位行随之改为 `seat-a`／`seat-b`。读数不变（26/26、25/26）。
 - **题图上 README**：两版顶部加 `docs/cover.jpg`（作者自制）。
 - 无行为变更。
 

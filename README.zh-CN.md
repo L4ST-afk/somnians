@@ -1,6 +1,5 @@
 # 蝶花半梦 · 存量去重（somnians · Viola Somnians）
 
-<!-- badges: 徽章行，别改成图片 alt 里的文字，CI 用它判「README 有徽章」 -->
 [![selfcheck](https://github.com/L4ST-afk/somnians/actions/workflows/selfcheck.yml/badge.svg)](https://github.com/L4ST-afk/somnians/actions/workflows/selfcheck.yml)
 [![PyPI](https://img.shields.io/pypi/v/somnians)](https://pypi.org/project/somnians/)
 [![Python](https://img.shields.io/pypi/pyversions/somnians)](https://pypi.org/project/somnians/)
@@ -18,7 +17,7 @@ mem0 / Zep / Letta 在写入那一刻就决定记不记。这一件处理另一�
 
 **形态是一个 CLI。** 库要先有宿主，提示词要先有能跑提示词的入口；CLI 装完敲一行就出读数。七个子命令各自独立，接进谁的库都不用改那个库。
 
-**命名**：中文雅名「蝶花半梦」，拉丁名 *Viola Somnians*（三色堇属 + 梦）；命令与包名统一用 `somnians`——PyPI 上这个名字未被占用，`viola` 已被占。
+**命名**：中文雅名「蝶花半梦」，拉丁名 *Viola Somnians*（三色堇属 + 梦）；命令与包名统一用 `somnians`——这个名字已在 PyPI 上，`viola` 先被占了。
 
 ```
 扫描 → 候选组 → 席位判决（并 / 不并）→ apply 软删 → rollback 按批还原

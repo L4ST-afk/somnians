@@ -1,6 +1,5 @@
 # somnians · 蝶花半梦（Viola Somnians）
 
-<!-- badges: 徽章行，别改成图片 alt 里的文字，CI 用它判「README 有徽章」 -->
 [![selfcheck](https://github.com/L4ST-afk/somnians/actions/workflows/selfcheck.yml/badge.svg)](https://github.com/L4ST-afk/somnians/actions/workflows/selfcheck.yml)
 [![PyPI](https://img.shields.io/pypi/v/somnians)](https://pypi.org/project/somnians/)
 [![Python](https://img.shields.io/pypi/pyversions/somnians)](https://pypi.org/project/somnians/)
