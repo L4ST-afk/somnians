@@ -378,11 +378,11 @@ def cmd_apply(args):
 
     # ① 备份 + 自证可解（读回比 hash）：备份不是「文件还在」，是「能解回原物」
     bak = args.records + f".bak-{batch}"
-    original = open(args.records, encoding="utf-8").read()
-    with open(bak, "w", encoding="utf-8") as f:
+    original = open(args.records, "rb").read()
+    with open(bak, "wb") as f:
         f.write(original)
-    digest = hashlib.sha256(original.encode("utf-8")).hexdigest()
-    if hashlib.sha256(open(bak, encoding="utf-8").read().encode("utf-8")).hexdigest() != digest:
+    digest = hashlib.sha256(original).hexdigest()
+    if hashlib.sha256(open(bak, "rb").read()).hexdigest() != digest:
         print(t("apply.backup_fail", bak=bak), file=sys.stderr)
         return 3
     print(t("apply.backup_ok", bak=bak, sha=digest[:12]))
@@ -390,9 +390,10 @@ def cmd_apply(args):
     # ② 先落暂存文件（不碰原文件）。payload 只序列化一次，正文与指纹同源
     staged = f"{args.records}.tmp-{batch}"
     payload = "".join(json.dumps(r, ensure_ascii=False) + "\n" for r in recs)
-    post_sha = hashlib.sha256(payload.encode("utf-8")).hexdigest()
-    with open(staged, "w", encoding="utf-8") as f:
-        f.write(payload)
+    payload_bytes = payload.encode("utf-8")
+    post_sha = hashlib.sha256(payload_bytes).hexdigest()
+    with open(staged, "wb") as f:
+        f.write(payload_bytes)
         f.flush()
         os.fsync(f.fileno())
 

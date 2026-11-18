@@ -238,6 +238,73 @@ class CliBehaviorTests(unittest.TestCase):
             self.assertTrue(journal.exists())
             self.assertEqual(self.soft_delete_rows(db, "b1"), (0, 0))
 
+    def test_recover_discards_crlf_input_using_original_byte_fingerprint(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            records = root / "records.jsonl"
+            original_records = [
+                {"id": "keeper", "text": "Keeper", "is_deleted": False},
+                {"id": "drop", "text": "A record to fold in", "is_deleted": False},
+            ]
+            original = "\r\n".join(
+                json.dumps(record, ensure_ascii=False) for record in original_records
+            ).encode("utf-8") + b"\r\n"
+            records.write_bytes(original)
+            decisions = root / "decisions.jsonl"
+            decisions.write_text(json.dumps({
+                "group": "G01", "keeper": "keeper", "drop": "drop",
+                "score": 0.9, "verdict": "并",
+            }, ensure_ascii=False) + "\n", encoding="utf-8")
+            db = root / "audit.db"
+
+            with patch.dict(os.environ, {"SOMNIANS_FAULT": "after_journal"}):
+                with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
+                    result = cli.cmd_apply(Namespace(
+                        records=str(records), decisions=str(decisions), db=str(db),
+                        batch="crlf-before",
+                    ))
+
+            journal = Path(cli._journal_path(str(records), "crlf-before"))
+            self.assertEqual(result, 4)
+            self.assertEqual(self.run_recover(records, db, "crlf-before"), 0)
+            self.assertFalse(journal.exists())
+            self.assertEqual(records.read_bytes(), original)
+            self.assertEqual(self.soft_delete_rows(db, "crlf-before"), (0, 0))
+
+    def test_recover_backfills_crlf_input_using_written_byte_fingerprint(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            records = root / "records.jsonl"
+            records.write_bytes(
+                ("\r\n".join(json.dumps(record, ensure_ascii=False) for record in [
+                    {"id": "keeper", "text": "Keeper", "is_deleted": False},
+                    {"id": "drop", "text": "A record to fold in", "is_deleted": False},
+                ]) + "\r\n").encode("utf-8")
+            )
+            decisions = root / "decisions.jsonl"
+            decisions.write_text(json.dumps({
+                "group": "G01", "keeper": "keeper", "drop": "drop",
+                "score": 0.9, "verdict": "并",
+            }, ensure_ascii=False) + "\n", encoding="utf-8")
+            db = root / "audit.db"
+
+            with patch.dict(os.environ, {"SOMNIANS_FAULT": "after_replace"}):
+                with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
+                    result = cli.cmd_apply(Namespace(
+                        records=str(records), decisions=str(decisions), db=str(db),
+                        batch="crlf-after",
+                    ))
+
+            journal = Path(cli._journal_path(str(records), "crlf-after"))
+            self.assertEqual(result, 4)
+            self.assertEqual(
+                json.loads(journal.read_text(encoding="utf-8"))["post_sha"],
+                cli._sha256_bytes(records.read_bytes()),
+            )
+            self.assertEqual(self.run_recover(records, db, "crlf-after"), 0)
+            self.assertFalse(journal.exists())
+            self.assertEqual(self.soft_delete_rows(db, "crlf-after"), (1, 1))
+
 
 if __name__ == "__main__":
     unittest.main()
