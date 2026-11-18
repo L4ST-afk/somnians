@@ -631,7 +631,11 @@ def cmd_rollback(args):
 
 
 def _selfcheck_line(cond, msg):
-    print(("[OK] " if cond else "[FAIL] ") + msg)
+    line = ("[OK] " if cond else "[FAIL] ") + msg
+    encoding = getattr(sys.stdout, "encoding", None)
+    if encoding:
+        line = line.encode(encoding, errors="backslashreplace").decode(encoding)
+    print(line)
 
 
 def cmd_selfcheck(args):

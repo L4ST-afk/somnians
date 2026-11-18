@@ -16,12 +16,12 @@ class CliBehaviorTests(unittest.TestCase):
         output = io.BytesIO()
         stdout = io.TextIOWrapper(output, encoding="cp1252")
         with contextlib.redirect_stdout(stdout):
-            cli._selfcheck_line(True, "probe")
+            cli._selfcheck_line(True, "equivalent ≡")
             cli._selfcheck_line(False, "probe")
             stdout.flush()
         self.assertEqual(
             output.getvalue().decode("cp1252").splitlines(),
-            ["[OK] probe", "[FAIL] probe"],
+            [r"[OK] equivalent \u2261", "[FAIL] probe"],
         )
 
     def test_normalization_and_verdict_parser(self):
