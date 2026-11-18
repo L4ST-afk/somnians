@@ -204,8 +204,8 @@ def match(a, b, thresh):
 def cmd_scan(args):
     recs = [json.loads(x) for x in open(args.inp, encoding="utf-8") if x.strip()]
     live = [r for r in recs if not r.get("is_deleted")]
-    print(t("scan.read", n=len(recs), live=len(live), thresh=args.thresh,
-            mode=t("scan.mode_exact") if args.exact else t("scan.mode_index")))
+    _safe_print(t("scan.read", n=len(recs), live=len(live), thresh=args.thresh,
+                  mode=t("scan.mode_exact") if args.exact else t("scan.mode_index")))
     pairs = []
     for i, j in (_pairs_exact(live) if args.exact else _pairs_indexed(live, args.cap)):
         s = match(live[i]["text"], live[j]["text"], args.thresh)
@@ -221,7 +221,7 @@ def cmd_scan(args):
     with open(args.out, "w", encoding="utf-8") as f:
         for p in out:
             f.write(json.dumps(p, ensure_ascii=False) + "\n")
-    print(t("scan.out", n=len(out), out=args.out))
+    _safe_print(t("scan.out", n=len(out), out=args.out))
     return 0
 
 
