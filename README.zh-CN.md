@@ -201,9 +201,13 @@ python3 scripts/make_bench.py --n 3120 > /tmp/bench.jsonl    # 合成那行的�
 
 ## 文件
 
+CI 会在 Ubuntu、macOS、Windows 上分别运行 Python 3.9、3.11、3.13，执行标准库单元测试、`selfcheck`、离线 demo 和倒排索引与全量扫描对账。`quality-gate` 是汇总整个矩阵结果的单一检查项。
+
 ```
 somnians                    # 零安装入口（仓库内直接跑）
-.github/workflows/selfcheck.yml  # CI：3.9/3.11/3.13 跑自检、读数、倒排对账
+.github/workflows/selfcheck.yml  # CI：3 个系统 × Python 3.9/3.11/3.13；quality-gate 汇总矩阵结果
+tests/test_cli.py            # 标准库 unittest：核心行为与 rollback 原子性
+scripts/check_bench.py       # 跨平台的合成数据倒排索引／全量对账
 scripts/make_bench.py       # 造压测数据（合成，可复算 README 的耗时）
 examples/seat.py            # 席位适配器示例（不配端点就回固定判决，只验管路）
 src/somnians/cli.py     # 实现，单文件、零依赖（标准库 + sqlite3）

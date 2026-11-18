@@ -201,9 +201,13 @@ When retries run out and groups are still missing: **exit code 2**, and those gr
 
 ## Files
 
+CI runs the standard-library unit suite, `selfcheck`, the offline demo, and indexed-vs-exact reconciliation on Ubuntu, macOS, and Windows with Python 3.9, 3.11, and 3.13. The `quality-gate` check is the single aggregate status for the full matrix.
+
 ```
 somnians                    # zero-install entry (run straight from the repo)
-.github/workflows/selfcheck.yml  # CI: 3.9/3.11/3.13, self-check + readings + inverted-index reconciliation
+.github/workflows/selfcheck.yml  # CI: 3 OSes × Python 3.9/3.11/3.13; quality-gate aggregates the matrix
+tests/test_cli.py            # stdlib unittest coverage for core behavior and rollback atomicity
+scripts/check_bench.py       # portable synthetic indexed-vs-exact CI check
 scripts/make_bench.py       # synthetic stress data (reproduces the timings above)
 examples/seat.py            # seat adapter example (returns fixed verdicts without an endpoint; pipeline only)
 src/somnians/cli.py         # implementation: one file, no dependencies (stdlib + sqlite3)
