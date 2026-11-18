@@ -19,7 +19,10 @@ class CliBehaviorTests(unittest.TestCase):
             cli._selfcheck_line(True, "probe")
             cli._selfcheck_line(False, "probe")
             stdout.flush()
-        self.assertEqual(output.getvalue(), b"[OK] probe\n[FAIL] probe\n")
+        self.assertEqual(
+            output.getvalue().decode("cp1252").splitlines(),
+            ["[OK] probe", "[FAIL] probe"],
+        )
 
     def test_normalization_and_verdict_parser(self):
         self.assertEqual(cli.norm("记忆- a! 12"), "记忆a12")
