@@ -140,6 +140,8 @@ SOMNIANS_LANG=zh-Hant ./somnians demo
 
 `recover` 看的是**文件到底换没换名**：日志在、文件没动，就不补审计。
 
+`rollback` 也按同样的暂存规矩走：先把完整还原后的 JSONL 写入并 fsync，再原子替换记录文件，最后提交审计事务。提交前遇到普通错误时，会回滚 SQLite 并原子恢复原文件；已有 `op=rollback` 审计记录的批次再次执行会直接无操作。这能兜住已处理的错误，但 rollback 本身没有崩溃恢复日志。
+
 ### 适配器只要一个 shell 脚本
 
 ```bash

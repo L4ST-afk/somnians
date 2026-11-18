@@ -23,11 +23,13 @@
 import argparse
 import concurrent.futures
 import difflib
+import errno
 import hashlib
 import json
 import os
 import re
 import sqlite3
+import stat
 import subprocess
 import sys
 import tempfile
@@ -462,29 +464,164 @@ def cmd_recover(args):
 
 def cmd_rollback(args):
     con = _db(args.db)
-    rows = con.execute("SELECT entry_id, undo_json, batch FROM audit_change WHERE op='soft_delete' AND batch=?",
-                       (args.batch,)).fetchall()
-    if not rows:
-        print(t("rb.none", batch=args.batch))
-        return 1
-    recs = [json.loads(x) for x in open(args.records, encoding="utf-8") if x.strip()]
-    by_id = {r["id"]: r for r in recs}
-    n = 0
-    for old, undo_json, b in rows:
-        undo = json.loads(undo_json)
-        if old in by_id:
-            by_id[old]["is_deleted"] = undo.get("is_deleted", False)
-            by_id[old].pop("merged_into", None)
-            n += 1
-    with con:
+    staged = original_stage = None
+    directory = os.path.dirname(os.path.abspath(args.records))
+    replaced = committed = fault_injected = post_commit_fault = False
+
+    def stage(content, mode):
+        fd, path = tempfile.mkstemp(prefix=".somnians-rollback-", dir=directory)
+        try:
+            os.chmod(path, mode)
+            with os.fdopen(fd, "wb") as f:
+                f.write(content)
+                f.flush()
+                os.fsync(f.fileno())
+        except BaseException:
+            try:
+                os.close(fd)
+            except OSError:
+                pass
+            if os.path.exists(path):
+                os.unlink(path)
+            raise
+        return path
+
+    def sync_directory():
+        if os.name == "nt":
+            return
+        unsupported = {
+            errno.EINVAL,
+            getattr(errno, "ENOTSUP", None),
+            getattr(errno, "EOPNOTSUPP", None),
+        }
+        try:
+            fd = os.open(directory, os.O_RDONLY)
+        except OSError as error:
+            if error.errno in unsupported:
+                return
+            raise
+        try:
+            try:
+                os.fsync(fd)
+            except OSError as error:
+                if error.errno not in unsupported:
+                    raise
+        finally:
+            os.close(fd)
+
+    try:
+        con.execute("BEGIN")
+        rows = con.execute(
+            "SELECT entry_id, undo_json, batch FROM audit_change "
+            "WHERE op='soft_delete' AND batch=?",
+            (args.batch,)).fetchall()
+        if not rows:
+            con.rollback()
+            con.close()
+            print(t("rb.none", batch=args.batch))
+            return 1
+        if con.execute(
+                "SELECT 1 FROM audit_change WHERE op='rollback' AND batch=? LIMIT 1",
+                (args.batch,)).fetchone():
+            con.rollback()
+            con.close()
+            print(t("rb.already", batch=args.batch))
+            return 0
+
+        with open(args.records, "rb") as f:
+            original_bytes = f.read()
+        recs = [json.loads(line) for line in original_bytes.decode("utf-8").splitlines()
+                if line.strip()]
+        by_id = {r["id"]: r for r in recs}
+        n = 0
+        for old, undo_json, b in rows:
+            undo = json.loads(undo_json)
+            if old in by_id:
+                by_id[old]["is_deleted"] = undo.get("is_deleted", False)
+                by_id[old].pop("merged_into", None)
+                n += 1
+
+        mode = stat.S_IMODE(os.stat(args.records).st_mode)
+        restored_bytes = "".join(
+            json.dumps(r, ensure_ascii=False) + "\n" for r in recs
+        ).encode("utf-8")
+        original_stage = stage(original_bytes, mode)
+        staged = stage(restored_bytes, mode)
+
         con.execute("DELETE FROM audit_merge WHERE batch=?", (args.batch,))
         for old, undo_json, b in rows:
-            con.execute("INSERT INTO audit_change(entry_id,op,batch,undo_json,created_at) VALUES(?,?,?,?,?)",
-                        (old, "rollback", b, undo_json, time.strftime("%Y-%m-%dT%H:%M:%S")))
-    con.close()
-    with open(args.records, "w", encoding="utf-8") as f:
-        for r in recs:
-            f.write(json.dumps(r, ensure_ascii=False) + "\n")
+            con.execute(
+                "INSERT INTO audit_change(entry_id,op,batch,undo_json,created_at) "
+                "VALUES(?,?,?,?,?)",
+                (old, "rollback", b, undo_json, time.strftime("%Y-%m-%dT%H:%M:%S")))
+
+        os.replace(staged, args.records)
+        staged = None
+        replaced = True
+        sync_directory()
+        if _fault() == "rollback_before_commit":
+            fault_injected = True
+            raise RuntimeError("injected rollback failure before commit")
+        con.commit()
+        if _fault() == "rollback_after_commit":
+            post_commit_fault = True
+            raise RuntimeError("injected interruption after rollback commit")
+        committed = True
+        con.close()
+    except BaseException:
+        rollback_error = None
+        if not committed:
+            if replaced and not con.in_transaction:
+                try:
+                    rollback_rows = con.execute(
+                        "SELECT COUNT(*) FROM audit_change "
+                        "WHERE op='rollback' AND batch=?",
+                        (args.batch,)).fetchone()[0]
+                    remaining_merges = con.execute(
+                        "SELECT COUNT(*) FROM audit_merge WHERE batch=?",
+                        (args.batch,)).fetchone()[0]
+                    committed = rollback_rows == len(rows) and remaining_merges == 0
+                except BaseException as error:
+                    backup_path = original_stage
+                    original_stage = None
+                    con.close()
+                    raise RuntimeError(
+                        "rollback commit outcome is ambiguous; original records are preserved at "
+                        f"{backup_path}") from error
+            if not committed:
+                try:
+                    con.rollback()
+                except BaseException as error:
+                    rollback_error = error
+            if replaced:
+                if not committed:
+                    try:
+                        os.replace(original_stage, args.records)
+                        original_stage = None
+                        sync_directory()
+                        replaced = False
+                    except BaseException as restore_error:
+                        con.close()
+                        raise RuntimeError(
+                            "rollback failed and the original records file could not be restored: "
+                            f"{restore_error}") from restore_error
+        con.close()
+        if rollback_error:
+            raise RuntimeError(
+                f"rollback file restored, but the SQLite transaction could not be rolled back: "
+                f"{rollback_error}") from rollback_error
+        if post_commit_fault and committed:
+            print(t("rb.commit_fault"), file=sys.stderr)
+            return 4
+        if fault_injected:
+            print(t("rb.fault"), file=sys.stderr)
+            return 4
+        raise
+    finally:
+        for path in (staged, original_stage):
+            if path and os.path.exists(path):
+                os.unlink(path)
+
     print(t("rb.done", batch=args.batch, n=n))
     return 0
 
@@ -616,15 +753,54 @@ def cmd_selfcheck(args):
         rows = con.execute("SELECT COUNT(*) FROM audit_merge").fetchone()[0]
         con.close()
         line(rows == len(exc), t("sc.recover", n=rows, total=len(exc)))
-        with contextlib.redirect_stdout(log):
-            rc_rb2 = cmd_rollback(argparse.Namespace(records=crash, db=db2, batch="crashA"))
+        before_fault = open(crash, "rb").read()
+        os.environ["SOMNIANS_FAULT"] = "rollback_before_commit"
+        try:
+            with contextlib.redirect_stdout(log), contextlib.redirect_stderr(log):
+                rc_rb_fault = cmd_rollback(
+                    argparse.Namespace(records=crash, db=db2, batch="crashA"))
+        finally:
+            os.environ.pop("SOMNIANS_FAULT", None)
+        fault_file_unchanged = open(crash, "rb").read() == before_fault
+        con = _db(db2)
+        fault_merges = con.execute(
+            "SELECT COUNT(*) FROM audit_merge WHERE batch='crashA'").fetchone()[0]
+        fault_rollbacks = con.execute(
+            "SELECT COUNT(*) FROM audit_change WHERE op='rollback' AND batch='crashA'"
+        ).fetchone()[0]
+        con.close()
+        fault_ok = (rc_rb_fault == 4 and fault_file_unchanged
+                    and fault_merges == len(exc) and fault_rollbacks == 0)
+        os.environ["SOMNIANS_FAULT"] = "rollback_after_commit"
+        try:
+            with contextlib.redirect_stdout(log), contextlib.redirect_stderr(log):
+                rc_rb2 = cmd_rollback(
+                    argparse.Namespace(records=crash, db=db2, batch="crashA"))
+        finally:
+            os.environ.pop("SOMNIANS_FAULT", None)
         st = {json.loads(x)["id"]: bool(json.loads(x).get("is_deleted"))
               for x in open(crash, encoding="utf-8")}
         con = _db(db2)
         left2 = con.execute("SELECT COUNT(*) FROM audit_merge").fetchone()[0]
+        rollback_rows = con.execute(
+            "SELECT COUNT(*) FROM audit_change WHERE op='rollback' AND batch='crashA'"
+        ).fetchone()[0]
         con.close()
-        line(rc_rb2 == 0 and not any(st.values()) and left2 == 0,
+        line(rc_rb2 == 4 and not any(st.values()) and left2 == 0,
              t("sc.crashA_end"))
+        after_rollback = open(crash, "rb").read()
+        with contextlib.redirect_stdout(log):
+            rc_rb_repeat = cmd_rollback(
+                argparse.Namespace(records=crash, db=db2, batch="crashA"))
+        con = _db(db2)
+        repeated_rows = con.execute(
+            "SELECT COUNT(*) FROM audit_change WHERE op='rollback' AND batch='crashA'"
+        ).fetchone()[0]
+        con.close()
+        line(fault_ok and rc_rb2 == 4 and rc_rb_repeat == 0
+             and open(crash, "rb").read() == after_rollback
+             and rollback_rows == len(exc) and repeated_rows == rollback_rows,
+             t("sc.rollback_atomic"))
 
         # 7 崩溃点 B：日志写了、文件没换、库没提 ⇒ 恢复应丢弃日志，不做任何改写
         crash2 = os.path.join(d, "crash2.jsonl")

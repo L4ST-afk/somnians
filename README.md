@@ -140,6 +140,8 @@ Both breakpoints have a recovery path that `selfcheck` exercises:
 
 `recover` looks at the **file's actual state**, not at whether a journal exists. Journal present, rename not done → no audit to write.
 
+`rollback` uses the same staging discipline: it fsyncs the complete restored JSONL before atomically replacing the records file, then commits the audit transaction. If an ordinary pre-commit error occurs, it rolls back SQLite and atomically restores the original file. A batch that already has an `op=rollback` audit row is a no-op on repeat. This protects handled errors; it is not a crash-recovery journal for rollback.
+
 ### An adapter can be one shell script
 
 ```bash
