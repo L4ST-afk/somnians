@@ -46,6 +46,14 @@ DATA = os.environ.get("SOMNIANS_DATA") or os.path.join(HERE, "data")
 # 数据根可显式覆盖（SOMNIANS_DATA）；默认是包内 data，pip 安装后同样成立。
 SEATS = {"seat-a": "seat-a.txt", "seat-b": "seat-b.txt"}
 
+
+def _safe_print(text):
+    encoding = getattr(sys.stdout, "encoding", None)
+    if encoding:
+        text = text.encode(encoding, errors="backslashreplace").decode(encoding)
+    print(text)
+
+
 # ---------------------------------------------------------------- 判据与解析
 
 
@@ -76,10 +84,10 @@ def cmd_demo(args):
     cases = [json.loads(x) for x in open(os.path.join(DATA, "public-cases.jsonl"), encoding="utf-8")]
     ids = {c["id"] for c in cases}
     types = Counter(c["type"] for c in cases)
-    print(t("demo.title", data=os.path.abspath(DATA)))
-    print(t("demo.cases", n=len(cases),
-            types=t("sep.list").join(f"{k}×{v}" for k, v in sorted(types.items()))))
-    print(t("demo.note"))
+    _safe_print(t("demo.title", data=os.path.abspath(DATA)))
+    _safe_print(t("demo.cases", n=len(cases),
+                  types=t("sep.list").join(f"{k}×{v}" for k, v in sorted(types.items()))))
+    _safe_print(t("demo.note"))
 
     rows, verdicts = [], {}
     for name, fn in SEATS.items():
@@ -95,25 +103,25 @@ def cmd_demo(args):
         rows.append((name, len(right), len(scored), acc,
                      100.0 * len(wrong_no) / max(1, len(merge)), can_ok))
 
-    print(t("demo.head"))
+    _safe_print(t("demo.head"))
     for name, r, n, acc, rev, can_ok in rows:
-        print(f"{name:<16}{f'{r}/{n}':>10}{f'{rev:.1f}%':>10}"
-              f"{(t('demo.canary_ok') if can_ok else t('demo.canary_bad')):>9}   "
-              f"{t('demo.usable') if can_ok else t('demo.void')}")
+        _safe_print(f"{name:<16}{f'{r}/{n}':>10}{f'{rev:.1f}%':>10}"
+                    f"{(t('demo.canary_ok') if can_ok else t('demo.canary_bad')):>9}   "
+                    f"{t('demo.usable') if can_ok else t('demo.void')}")
 
     a, b = list(SEATS)
     diff = [c["id"] for c in cases if verdicts[a].get(c["id"]) != verdicts[b].get(c["id"])]
-    print(t("demo.diff", n=len(diff),
-            ids=t("sep.list").join(diff) if diff else t("demo.none")))
+    _safe_print(t("demo.diff", n=len(diff),
+                  ids=t("sep.list").join(diff) if diff else t("demo.none")))
     for cid in diff:
         c = next(c for c in cases if c["id"] == cid)
-        print(t("demo.case", cid=cid, kind=c["type"], exp=c["exp"]))
-        print(t("demo.keeper", k=c["K"]))
-        print(t("demo.drop", d=c["D"]))
-        print(t("demo.verdicts", a=a, va=verdicts[a].get(cid), b=b, vb=verdicts[b].get(cid)))
-    print(t("demo.crit1"))
-    print(t("demo.crit2"))
-    print(t("demo.crit3"))
+        _safe_print(t("demo.case", cid=cid, kind=c["type"], exp=c["exp"]))
+        _safe_print(t("demo.keeper", k=c["K"]))
+        _safe_print(t("demo.drop", d=c["D"]))
+        _safe_print(t("demo.verdicts", a=a, va=verdicts[a].get(cid), b=b, vb=verdicts[b].get(cid)))
+    _safe_print(t("demo.crit1"))
+    _safe_print(t("demo.crit2"))
+    _safe_print(t("demo.crit3"))
     return 0
 
 
@@ -631,11 +639,7 @@ def cmd_rollback(args):
 
 
 def _selfcheck_line(cond, msg):
-    line = ("[OK] " if cond else "[FAIL] ") + msg
-    encoding = getattr(sys.stdout, "encoding", None)
-    if encoding:
-        line = line.encode(encoding, errors="backslashreplace").decode(encoding)
-    print(line)
+    _safe_print(("[OK] " if cond else "[FAIL] ") + msg)
 
 
 def cmd_selfcheck(args):
