@@ -30,4 +30,4 @@ for i in range(a.n):
 for k in range(a.dups):
     recs.append({"id": f"dup{k}", "text": random.choice(recs)["text"], "is_deleted": False})
 for r in recs:
-    print(json.dumps(r, ensure_ascii=False))
+    print(json.dumps(r))
