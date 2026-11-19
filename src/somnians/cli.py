@@ -66,7 +66,7 @@ def parse_verdicts(text, ids):
     """宽松解析席位输出 → {id: '并'|'不并'}"""
     got = {}
     for line in text.splitlines():
-        m = re.match(r"\s*[`*>\-]*\s*([RTCG]\d{2,3})", line)
+        m = re.match(r"\s*[`*>\-]*\s*([RTCG]\d+)", line)
         if not m or m.group(1) not in ids:
             continue
         seg = line[m.end():]
@@ -201,8 +201,40 @@ def match(a, b, thresh):
     return s if s >= thresh else None
 
 
+def _load_jsonl(path, required=()):
+    """读 JSONL → (records, None)；坏 JSON / 非对象 / 缺字段 → (None, 错误消息)。
+
+    行号随消息带回，调用方打印到 stderr 并以退出码 2 拒绝，不抛 traceback。
+    """
+    try:
+        handle = open(path, encoding="utf-8")
+    except OSError as error:
+        return None, t("input.open_fail", path=path,
+                       err=str(error) or error.__class__.__name__)
+    records = []
+    with handle:
+        for lineno, line in enumerate(handle, 1):
+            if not line.strip():
+                continue
+            try:
+                obj = json.loads(line)
+            except json.JSONDecodeError as error:
+                return None, t("input.bad_json", path=path, line=lineno, err=str(error))
+            if not isinstance(obj, dict):
+                return None, t("input.bad_shape", path=path, line=lineno)
+            missing = [key for key in required if key not in obj]
+            if missing:
+                return None, t("input.missing_field", path=path, line=lineno,
+                               keys=", ".join(missing))
+            records.append(obj)
+    return records, None
+
+
 def cmd_scan(args):
-    recs = [json.loads(x) for x in open(args.inp, encoding="utf-8") if x.strip()]
+    recs, err = _load_jsonl(args.inp, ("id", "text"))
+    if err:
+        print(err, file=sys.stderr)
+        return 2
     live = [r for r in recs if not r.get("is_deleted")]
     _safe_print(t("scan.read", n=len(recs), live=len(live), thresh=args.thresh,
                   mode=t("scan.mode_exact") if args.exact else t("scan.mode_index")))
@@ -299,12 +331,17 @@ def _call_adapter(adapter, brief, timeout, ids):
         return parse_verdicts(out, ids), ""
     except subprocess.TimeoutExpired:
         return {}, "超时"
+    except (OSError, subprocess.SubprocessError) as error:
+        return {}, t("adj.adapter_error", err=str(error) or error.__class__.__name__)
     finally:
         os.unlink(path)
 
 
 def cmd_adjudicate(args):
-    cands = [json.loads(x) for x in open(args.inp, encoding="utf-8") if x.strip()]
+    cands, err = _load_jsonl(args.inp, ("group",))
+    if err:
+        print(err, file=sys.stderr)
+        return 2
     ids = {c["group"] for c in cands}
     brief = _brief_for(cands)
     if args.brief_out:
@@ -371,15 +408,80 @@ def _fault():
     return os.environ.get("SOMNIANS_FAULT", "")
 
 
+_BATCH_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{0,127}\Z")
+
+
+def _validate_batch(batch):
+    return bool(batch and ".." not in batch and _BATCH_RE.fullmatch(batch))
+
+
+def _invalid_batch(batch):
+    print(t("batch.invalid", batch=batch), file=sys.stderr)
+    return 2
+
+
+def _staged_path(records, batch):
+    return f"{records}.tmp-{batch}"
+
+
+def _discard_staged(records, batch):
+    path = _staged_path(records, batch)
+    if os.path.exists(path):
+        os.unlink(path)
+
+
+def _sync_directory(directory):
+    if os.name == "nt":
+        return
+    unsupported = {
+        errno.EINVAL,
+        getattr(errno, "ENOTSUP", None),
+        getattr(errno, "EOPNOTSUPP", None),
+    }
+    try:
+        fd = os.open(directory, os.O_RDONLY)
+    except OSError as error:
+        if error.errno in unsupported:
+            return
+        raise
+    try:
+        try:
+            os.fsync(fd)
+        except OSError as error:
+            if error.errno not in unsupported:
+                raise
+    finally:
+        os.close(fd)
+
+
 def _journal_path(records, batch):
+    if not _validate_batch(batch):
+        raise ValueError(t("batch.invalid", batch=batch))
     return f"{records}.journal-{batch}"
 
 
 def cmd_apply(args):
-    recs = [json.loads(x) for x in open(args.records, encoding="utf-8") if x.strip()]
-    decs = [json.loads(x) for x in open(args.decisions, encoding="utf-8") if x.strip()]
-    by_id = {r["id"]: r for r in recs}
     batch = args.batch or time.strftime("dream-%Y%m%d")
+    if not _validate_batch(batch):
+        return _invalid_batch(batch)
+    con = _db(args.db)
+    reused = con.execute(
+        "SELECT 1 FROM audit_change WHERE batch=? AND op IN ('soft_delete', 'rollback') LIMIT 1",
+        (batch,)).fetchone()
+    con.close()
+    if reused:
+        print(t("apply.batch_reused", batch=batch), file=sys.stderr)
+        return 2
+
+    recs, err = _load_jsonl(args.records, ("id", "text"))
+    if err:
+        print(err, file=sys.stderr)
+        return 2
+    decs, err = _load_jsonl(args.decisions, ("group", "keeper", "drop", "verdict"))
+    if err:
+        print(err, file=sys.stderr)
+        return 2
+    by_id = {r["id"]: r for r in recs}
     merged, skipped = [], []
     for d in decs:
         if d.get("verdict") != "并":
@@ -392,7 +494,9 @@ def cmd_apply(args):
         if drop.get("is_deleted") and drop.get("merged_into") == d["keeper"]:
             skipped.append(d["group"] + "(已并过)")
             continue
-        undo = {"id": drop["id"], "text": drop["text"], "is_deleted": drop.get("is_deleted", False)}
+        undo = {"id": drop["id"], "text": drop["text"],
+                "is_deleted": drop.get("is_deleted", False),
+                "merged_into": drop.get("merged_into")}
         drop["is_deleted"] = True
         drop["merged_into"] = d["keeper"]
         merged.append((d["drop"], d["keeper"], d.get("score"), batch, json.dumps(undo, ensure_ascii=False)))
@@ -409,7 +513,7 @@ def cmd_apply(args):
     print(t("apply.backup_ok", bak=bak, sha=digest[:12]))
 
     # ② 先落暂存文件（不碰原文件）。payload 只序列化一次，正文与指纹同源
-    staged = f"{args.records}.tmp-{batch}"
+    staged = _staged_path(args.records, batch)
     payload = "".join(json.dumps(r, ensure_ascii=False) + "\n" for r in recs)
     payload_bytes = payload.encode("utf-8")
     post_sha = hashlib.sha256(payload_bytes).hexdigest()
@@ -428,7 +532,11 @@ def cmd_apply(args):
                    "merges": [{"old": m[0], "keeper": m[1], "score": m[2],
                                "undo": json.loads(m[4])} for m in merged]},
                   f, ensure_ascii=False)
+        f.flush()
+        os.fsync(f.fileno())
     if _fault() == "after_journal":
+        if os.path.exists(staged):
+            os.unlink(staged)
         print(t("apply.fault_j"), file=sys.stderr)
         return 4
 
@@ -444,6 +552,7 @@ def cmd_apply(args):
 
         # ④ 原子换名（同一目录内 rename 是原子的），⑤ 再提交事务
         os.replace(staged, args.records)
+        _sync_directory(os.path.dirname(os.path.abspath(args.records)))
         if _fault() == "after_replace":
             con.rollback()
             con.close()
@@ -480,11 +589,15 @@ def cmd_recover(args):
     两条都不匹配 ⇒ 状态不明，不写审计、不删日志，退出码 5。
     旧日志没有指纹时才退回按 is_deleted 判，并明说证据较弱。
     """
+    if not _validate_batch(args.batch):
+        return _invalid_batch(args.batch)
     jpath = args.journal or _journal_path(args.records, args.batch)
     if not os.path.exists(jpath):
         print(t("rec.none", jpath=jpath))
         return 0
     j = json.load(open(jpath, encoding="utf-8"))
+    if not _validate_batch(j.get("batch")):
+        return _invalid_batch(j.get("batch"))
     con = _db(args.db)
     done = con.execute(
         "SELECT COUNT(*) FROM audit_change WHERE batch=? AND op='soft_delete'",
@@ -492,6 +605,7 @@ def cmd_recover(args):
     if done:
         con.close()
         os.unlink(jpath)
+        _discard_staged(args.records, j["batch"])
         print(t("rec.already", batch=j["batch"], n=done))
         return 0
 
@@ -503,6 +617,7 @@ def cmd_recover(args):
         if not touched:
             con.close()
             os.unlink(jpath)
+            _discard_staged(args.records, j["batch"])
             print(t("rec.discard", batch=j["batch"], n=len(j["merges"])))
             return 0
         print(t("rec.legacy", batch=j["batch"]))
@@ -513,6 +628,7 @@ def cmd_recover(args):
         elif now_sha == pre:
             con.close()
             os.unlink(jpath)
+            _discard_staged(args.records, j["batch"])
             print(t("rec.discard", batch=j["batch"], n=len(j["merges"])))
             return 0
         else:
@@ -530,11 +646,14 @@ def cmd_recover(args):
                          json.dumps(m["undo"], ensure_ascii=False), now))
     con.close()
     os.unlink(jpath)
+    _discard_staged(args.records, j["batch"])
     print(t("rec.backfill", batch=j["batch"], n=len(touched)))
     return 0
 
 
 def cmd_rollback(args):
+    if not _validate_batch(args.batch):
+        return _invalid_batch(args.batch)
     con = _db(args.db)
     staged = original_stage = None
     directory = os.path.dirname(os.path.abspath(args.records))
@@ -558,29 +677,6 @@ def cmd_rollback(args):
             raise
         return path
 
-    def sync_directory():
-        if os.name == "nt":
-            return
-        unsupported = {
-            errno.EINVAL,
-            getattr(errno, "ENOTSUP", None),
-            getattr(errno, "EOPNOTSUPP", None),
-        }
-        try:
-            fd = os.open(directory, os.O_RDONLY)
-        except OSError as error:
-            if error.errno in unsupported:
-                return
-            raise
-        try:
-            try:
-                os.fsync(fd)
-            except OSError as error:
-                if error.errno not in unsupported:
-                    raise
-        finally:
-            os.close(fd)
-
     try:
         con.execute("BEGIN")
         rows = con.execute(
@@ -602,15 +698,29 @@ def cmd_rollback(args):
 
         with open(args.records, "rb") as f:
             original_bytes = f.read()
-        recs = [json.loads(line) for line in original_bytes.decode("utf-8").splitlines()
-                if line.strip()]
+        recs, err = _load_jsonl(args.records, ("id",))
+        if err:
+            con.rollback()
+            con.close()
+            print(err, file=sys.stderr)
+            return 2
         by_id = {r["id"]: r for r in recs}
+        missing = [old for old, _, _ in rows if old not in by_id]
+        if missing:
+            con.rollback()
+            con.close()
+            print(t("rb.missing", batch=args.batch, ids=", ".join(missing)), file=sys.stderr)
+            return 2
         n = 0
         for old, undo_json, b in rows:
             undo = json.loads(undo_json)
             if old in by_id:
                 by_id[old]["is_deleted"] = undo.get("is_deleted", False)
-                by_id[old].pop("merged_into", None)
+                prev_merge = undo.get("merged_into", None)
+                if prev_merge is None:
+                    by_id[old].pop("merged_into", None)
+                else:
+                    by_id[old]["merged_into"] = prev_merge
                 n += 1
 
         mode = stat.S_IMODE(os.stat(args.records).st_mode)
@@ -630,7 +740,7 @@ def cmd_rollback(args):
         os.replace(staged, args.records)
         staged = None
         replaced = True
-        sync_directory()
+        _sync_directory(directory)
         if _fault() == "rollback_before_commit":
             fault_injected = True
             raise RuntimeError("injected rollback failure before commit")
@@ -670,7 +780,7 @@ def cmd_rollback(args):
                     try:
                         os.replace(original_stage, args.records)
                         original_stage = None
-                        sync_directory()
+                        _sync_directory(directory)
                         replaced = False
                     except BaseException as restore_error:
                         con.close()
@@ -907,6 +1017,27 @@ def cmd_selfcheck(args):
 # ---------------------------------------------------------------- main
 
 
+def _probability(value):
+    value = float(value)
+    if not 0 <= value <= 1:
+        raise argparse.ArgumentTypeError("--thresh must be between 0 and 1")
+    return value
+
+
+def _positive_int(value):
+    value = int(value)
+    if value < 1:
+        raise argparse.ArgumentTypeError("value must be at least 1")
+    return value
+
+
+def _positive_timeout(value):
+    value = int(value)
+    if value <= 0:
+        raise argparse.ArgumentTypeError("--timeout must be greater than 0")
+    return value
+
+
 def main():
     p = argparse.ArgumentParser(prog="somnians", description="蝶花半梦 · in-place deduplication for stored memory (rollback by batch, always audited)")
     p.add_argument("--lang", choices=list(LANGS), metavar="LANG",
@@ -919,18 +1050,18 @@ def main():
     s = sub.add_parser("scan", help="scan for near-duplicate candidates（扫同义候选）")
     s.add_argument("--in", dest="inp", required=True, help="input records, JSONL")
     s.add_argument("--out", required=True, help="output candidates, JSONL")
-    s.add_argument("--thresh", type=float, default=0.62)
+    s.add_argument("--thresh", type=_probability, default=0.62)
     s.add_argument("--exact", action="store_true", help="full pairwise comparison, slow; use it to reconcile（全量对账用）")
-    s.add_argument("--cap", type=int, default=500, help="cap on posting length per 3-gram; longer lists stop contributing pairs（高频道闸）")
+    s.add_argument("--cap", type=_positive_int, default=500, help="cap on posting length per 3-gram; longer lists stop contributing pairs（高频道闸）")
 
     a = sub.add_parser("adjudicate", help="build the brief and call your seat command（生成 brief 并调席位）")
     a.add_argument("--in", dest="inp", required=True, help="output candidates, JSONL")
     a.add_argument("--out", required=True, help="output decisions, JSONL")
     a.add_argument("--adapter", nargs="+", help="seat command; receives the brief path as argv[1], prints verdict lines on stdout（席位命令）")
     a.add_argument("--brief-out", help="also keep a copy of the brief（brief 落盘）")
-    a.add_argument("--jobs", type=int, default=1, help="number of seats to run in parallel, default 1（并发席位数）")
-    a.add_argument("--retry", type=int, default=1, help="truncation recovery rounds; only missing groups are resent（截断恢复轮数）")
-    a.add_argument("--timeout", type=int, default=900, help="wall-clock limit per seat, in seconds（单席上限）")
+    a.add_argument("--jobs", type=_positive_int, default=1, help="number of seats to run in parallel, default 1（并发席位数）")
+    a.add_argument("--retry", type=_positive_int, default=1, help="truncation recovery rounds; only missing groups are resent（截断恢复轮数）")
+    a.add_argument("--timeout", type=_positive_timeout, default=900, help="wall-clock limit per seat, in seconds（单席上限）")
 
     ap = sub.add_parser("apply", help="soft-delete in one transaction, write the audit（单事务软删＋审计）")
     ap.add_argument("--records", required=True)

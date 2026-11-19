@@ -1,3 +1,4 @@
+import argparse
 import contextlib
 import io
 import json
@@ -30,6 +31,14 @@ class CliBehaviorTests(unittest.TestCase):
             cli.parse_verdicts("G01｜不并\nG02｜并\nG03｜不合并", {"G01", "G02", "G03"}),
             {"G01": "不并", "G02": "并", "G03": "不并"},
         )
+        self.assertEqual(cli.parse_verdicts("G1000｜并", {"G1000"}), {"G1000": "并"})
+
+    def test_adapter_start_failure_returns_empty_verdicts(self):
+        with patch("somnians.cli.subprocess.run",
+                   side_effect=FileNotFoundError("missing adapter")):
+            got, note = cli._call_adapter(["missing-seat"], "brief", 30, {"G01"})
+        self.assertEqual(got, {})
+        self.assertIn("missing adapter", note)
 
     def test_seat_fallback_trace_drops_verdicts(self):
         """标称模型静默回退 auto：回执里的判决不计入，只留失效提示。"""
@@ -112,10 +121,10 @@ class CliBehaviorTests(unittest.TestCase):
         con.close()
         return counts
 
-    def run_rollback(self, records, db):
+    def run_rollback(self, records, db, batch="batch-1"):
         with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
             return cli.cmd_rollback(Namespace(
-                records=str(records), db=str(db), batch="batch-1",
+                records=str(records), db=str(db), batch=batch,
             ))
 
     def test_rollback_precommit_failure_restores_original_file_and_audit(self):
@@ -146,12 +155,160 @@ class CliBehaviorTests(unittest.TestCase):
             self.assertNotIn("merged_into", restored_drop)
             self.assertEqual(restored_drop["source"], "test")
             self.assertEqual(self.audit_counts(db), (1, 0))
-
             committed_file = records.read_bytes()
             self.assertEqual(self.run_rollback(records, db), 0)
             self.assertEqual(records.read_bytes(), committed_file)
             self.assertEqual(self.audit_counts(db), (1, 0))
 
+    def test_rollback_missing_record_refuses_without_writing_audit(self):
+        with tempfile.TemporaryDirectory() as directory:
+            records, db = self.seed_rollback_batch(Path(directory))
+            records.write_text(
+                json.dumps({"id": "keeper", "text": "Keeper"}) + "\n",
+                encoding="utf-8",
+            )
+            result = self.run_rollback(records, db)
+            self.assertEqual(result, 2)
+            con = cli._db(str(db))
+            self.assertEqual(con.execute(
+                "SELECT COUNT(*) FROM audit_change WHERE op='rollback' AND batch='batch-1'"
+            ).fetchone()[0], 0)
+            self.assertEqual(con.execute(
+                "SELECT COUNT(*) FROM audit_merge WHERE batch='batch-1'"
+            ).fetchone()[0], 1)
+            con.close()
+
+    def test_apply_rejects_reused_batch_before_creating_backup(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            records = root / "records.jsonl"
+            self.write_records(records, [
+                {"id": "keeper", "text": "Keeper", "is_deleted": False},
+                {"id": "drop", "text": "Drop", "is_deleted": False},
+            ])
+            decisions = root / "decisions.jsonl"
+            decisions.write_text(json.dumps({
+                "group": "G01", "keeper": "keeper", "drop": "drop",
+                "score": 0.9, "verdict": "并",
+            }) + "\n", encoding="utf-8")
+            db = root / "audit.db"
+            con = cli._db(str(db))
+            con.execute(
+                "INSERT INTO audit_change(entry_id,op,batch,undo_json,created_at) "
+                "VALUES(?,?,?,?,?)", ("drop", "soft_delete", "reuse",
+                                       "{}", "now"))
+            con.commit()
+            con.close()
+            result = cli.cmd_apply(Namespace(
+                records=str(records), decisions=str(decisions), db=str(db),
+                batch="reuse",
+            ))
+            self.assertEqual(result, 2)
+            self.assertFalse(Path(str(records) + ".bak-reuse").exists())
+            self.assertFalse(Path(str(records) + ".tmp-reuse").exists())
+
+    def test_apply_after_journal_removes_staged_file(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            records = root / "records.jsonl"
+            self.write_records(records, [
+                {"id": "keeper", "text": "Keeper", "is_deleted": False},
+                {"id": "drop", "text": "Drop", "is_deleted": False},
+            ])
+            decisions = root / "decisions.jsonl"
+            decisions.write_text(json.dumps({
+                "group": "G01", "keeper": "keeper", "drop": "drop",
+                "score": 0.9, "verdict": "并",
+            }) + "\n", encoding="utf-8")
+            with patch.dict(os.environ, {"SOMNIANS_FAULT": "after_journal"}):
+                result = cli.cmd_apply(Namespace(
+                    records=str(records), decisions=str(decisions),
+                    db=str(root / "audit.db"), batch="staged",
+                ))
+            self.assertEqual(result, 4)
+            self.assertFalse(Path(str(records) + ".tmp-staged").exists())
+
+    def test_invalid_batch_is_rejected(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            records = root / "records.jsonl"
+            records.write_text("", encoding="utf-8")
+            result = cli.cmd_rollback(Namespace(
+                records=str(records), db=str(root / "audit.db"), batch="../bad",
+            ))
+            self.assertEqual(result, 2)
+
+    def test_numeric_argument_boundaries_are_rejected(self):
+        for parser, value in (
+            (cli._probability, "-0.1"),
+            (cli._probability, "1.1"),
+            (cli._positive_int, "0"),
+            (cli._positive_timeout, "0"),
+        ):
+            with self.subTest(parser=parser.__name__, value=value):
+                with self.assertRaises(argparse.ArgumentTypeError):
+                    parser(value)
+
+    def test_bad_jsonl_is_rejected_without_writing_backup(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            records = root / "records.jsonl"
+            decisions = root / "decisions.jsonl"
+            db = root / "audit.db"
+            decisions.write_text(json.dumps({"group": "G01", "keeper": "keeper",
+                                             "drop": "drop", "verdict": "并"}) + "\n",
+                                 encoding="utf-8")
+            records.write_text("{not json\n", encoding="utf-8")
+            rc = cli.cmd_apply(Namespace(records=str(records), decisions=str(decisions),
+                                         db=str(db), batch="bad"))
+            self.assertEqual(rc, 2)
+            self.assertFalse(Path(str(records) + ".bak-bad").exists())
+
+    def test_missing_field_in_decisions_is_rejected(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            records = root / "records.jsonl"
+            decisions = root / "decisions.jsonl"
+            db = root / "audit.db"
+            self.write_records(records, [
+                {"id": "keeper", "text": "Keeper", "is_deleted": False},
+                {"id": "drop", "text": "Drop", "is_deleted": False},
+            ])
+            decisions.write_text(json.dumps({"group": "G01", "keeper": "keeper",
+                                             "drop": "drop"}) + "\n", encoding="utf-8")
+            rc = cli.cmd_apply(Namespace(records=str(records), decisions=str(decisions),
+                                         db=str(db), batch="miss"))
+            self.assertEqual(rc, 2)
+            self.assertFalse(Path(str(records) + ".bak-miss").exists())
+
+    def test_rollback_restores_original_merged_into(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            records = root / "records.jsonl"
+            self.write_records(records, [
+                {"id": "keeper", "text": "Keeper", "is_deleted": False},
+                {"id": "drop", "text": "Drop", "is_deleted": True,
+                 "merged_into": "old-keeper"},
+            ])
+            decisions = root / "decisions.jsonl"
+            decisions.write_text(json.dumps({
+                "group": "G01", "keeper": "keeper", "drop": "drop",
+                "score": 0.9, "verdict": "并",
+            }) + "\n", encoding="utf-8")
+            db = root / "audit.db"
+            self.assertEqual(cli.cmd_apply(Namespace(
+                records=str(records), decisions=str(decisions),
+                db=str(db), batch="redo")), 0)
+            merged = next(r for r in (json.loads(x) for x in records.read_text().splitlines())
+                          if r["id"] == "drop")
+            self.assertTrue(merged["is_deleted"])
+            self.assertEqual(merged["merged_into"], "keeper")
+
+            self.assertEqual(self.run_rollback(records, db, "redo"), 0)
+            restored = next(r for r in (json.loads(x) for x in records.read_text().splitlines())
+                            if r["id"] == "drop")
+            self.assertTrue(restored["is_deleted"])
+            self.assertEqual(restored["merged_into"], "old-keeper")
 
     def write_records(self, path, records):
         path.write_text(
@@ -197,9 +354,11 @@ class CliBehaviorTests(unittest.TestCase):
             db = Path(directory) / "audit.db"
             pre = cli._sha256_bytes(records.read_bytes())
             journal = self.write_journal(records, "b1", pre, "0" * 64)
+            Path(str(records) + ".tmp-b1").write_bytes(b"stale staging")
 
             self.assertEqual(self.run_recover(records, db, "b1"), 0)
             self.assertFalse(journal.exists())
+            self.assertFalse(Path(str(records) + ".tmp-b1").exists())
             self.assertEqual(self.soft_delete_rows(db, "b1"), (0, 0))
 
     def test_recover_backfills_when_file_matches_post_fingerprint(self):
@@ -213,9 +372,11 @@ class CliBehaviorTests(unittest.TestCase):
             db = Path(directory) / "audit.db"
             journal = self.write_journal(records, "b1", "0" * 64,
                                          cli._sha256_bytes(records.read_bytes()))
+            Path(str(records) + ".tmp-b1").write_bytes(b"stale staging")
 
             self.assertEqual(self.run_recover(records, db, "b1"), 0)
             self.assertFalse(journal.exists())
+            self.assertFalse(Path(str(records) + ".tmp-b1").exists())
             self.assertEqual(self.soft_delete_rows(db, "b1"), (1, 1))
 
     def test_recover_is_idempotent_when_audit_already_committed(self):
@@ -239,9 +400,11 @@ class CliBehaviorTests(unittest.TestCase):
             con.close()
             journal = self.write_journal(records, "b1", "0" * 64,
                                          cli._sha256_bytes(records.read_bytes()))
+            Path(str(records) + ".tmp-b1").write_bytes(b"stale staging")
 
             self.assertEqual(self.run_recover(records, db, "b1"), 0)
             self.assertFalse(journal.exists())
+            self.assertFalse(Path(str(records) + ".tmp-b1").exists())
             self.assertEqual(self.soft_delete_rows(db, "b1"), (1, 1))
 
     def test_recover_refuses_to_guess_when_file_matches_neither(self):

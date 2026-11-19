@@ -114,7 +114,7 @@ Before writing anything, `apply` **proves its own backup**: it reads `.bak-<batc
 
 ## Languages
 
-Runtime copy ships in three catalogs: **English / 简体 / 繁體**. Order of choice: `--lang` > `SOMNIANS_LANG` > `LC_ALL` / `LC_MESSAGES` / `LANGUAGE` / `LANG` > English. `C`, `POSIX` and empty values are skipped; an unrecognised tag falls back to English instead of guessing.
+Runtime copy ships in three catalogs: **English / 简体 / 繁體**. Order of choice: `--lang` > `SOMNIANS_LANG` > `LANGUAGE` > `LC_ALL` / `LC_MESSAGES` > `LANG` > English. `C`, `POSIX` and empty values are skipped; an unrecognised tag falls back to English instead of guessing.
 
 ```bash
 ./somnians demo                    # follows your locale
@@ -146,6 +146,18 @@ Both breakpoints have a recovery path that `selfcheck` exercises:
 `recover` trusts fingerprints, not `is_deleted`: the journal records the sha256 of the file before and after the batch. Equals the "after" hash ⇒ the file was renamed and the audit is missing ⇒ backfill. Equals the "before" hash ⇒ nothing took effect ⇒ drop the journal. Neither ⇒ unknown state: write nothing, delete nothing, exit code 5. If the batch's audit rows are already committed, it only drops the journal — running it again is a no-op.
 
 `rollback` uses the same staging discipline: it fsyncs the complete restored JSONL before atomically replacing the records file, then commits the audit transaction. If an ordinary pre-commit error occurs, it rolls back SQLite and atomically restores the original file. A batch that already has an `op=rollback` audit row is a no-op on repeat. This protects handled errors; it is not a crash-recovery journal for rollback.
+
+## Guards and exit codes
+
+Before touching the store, several inputs are rejected up front:
+
+- **Batch reuse**: a batch that already has a `soft_delete` or `rollback` audit row cannot be applied again.
+- **Batch name**: only `[A-Za-z0-9][A-Za-z0-9._-]{0,127}`; `..`, `/`, `\` and newlines are rejected, so a name cannot escape the records directory.
+- **Input JSONL**: a malformed line, a non-object line or a missing required field is reported with file and line number; no backup or staging file is written.
+- **Adapter failure**: a seat command that cannot start (missing file, permission error) leaves its group undecided for retry instead of crashing the round.
+- **Missing record on rollback**: an audit row pointing at an ID no longer in the file refuses the rollback and writes no rollback row.
+
+Exit codes: `0` success · `1` nothing to restore · `2` invalid input or batch, reused batch, missing record, or groups left undecided after retry · `3` backup self-check failed · `4` injected fault (self-check only) · `5` recover cannot tell the file's state.
 
 ### An adapter can be one shell script
 

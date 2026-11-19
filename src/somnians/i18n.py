@@ -4,7 +4,7 @@
 三件事，都在这一层：
 
 1. **三语目录**：`en` / `zh-Hans` / `zh-Hant`。三份键必须一一对齐（`catalog_gaps()` 查）。
-2. **判定顺序**：`--lang` > `SOMNIANS_LANG` > `LC_ALL` / `LC_MESSAGES` / `LANGUAGE` / `LANG` > `en`。
+2. **判定顺序**：`--lang` > `SOMNIANS_LANG` > `LANGUAGE` > `LC_ALL` / `LC_MESSAGES` > `LANG` > `en`。
    `C` / `POSIX` / 空值一律跳过；认不出的标签落回 `en`，不猜。
 3. **什么不翻**：`并` / `不并` / `未判` 是 decisions.jsonl 的**协议值**，`SELFCHECK_PASS` 是
    机器令牌，退出码、ID、路径、JSON 一律不翻。翻协议值＝把别人的库读坏，那不是国际化。
@@ -49,6 +49,10 @@ CATALOG = {
         "scan.cap": "⚠ {n} 3-gram(s) exceed cap={cap} and were skipped (candidates may be missed); "
                     "use --exact or raise --cap if you need an exact answer",
         "scan.read": "Read {n} record(s), {live} live; threshold {thresh}; {mode}",
+        "input.open_fail": "Cannot open {path}: {err}",
+        "input.bad_json": "Line {line} of {path} is not valid JSON: {err}",
+        "input.bad_shape": "Line {line} of {path} is not a JSON object",
+        "input.missing_field": "Line {line} of {path} is missing field(s): {keys}",
         "scan.mode_exact": "full pairwise comparison (--exact)",
         "scan.mode_index": "3-gram inverted index",
         "scan.out": "Candidates: {n} pair(s) → {out}",
@@ -56,6 +60,7 @@ CATALOG = {
         "adj.r1": "Round 1: {got}/{ids} group(s) (parallel {jobs})",
         "adj.r1_fail": "; {n} seat(s) failed",
         "adj.seat_fallback": "seat fell back or was unavailable (traces: {traces}); its verdicts are not counted",
+        "adj.adapter_error": "seat adapter failed: {err}",
         "adj.retry": "Retry {rd}: only {n} missing group(s) → {ids}",
         "adj.retry_err": "  retry failed: {err}",
         "adj.out": "Verdicts: {got}/{ids} group(s) → {out}",
@@ -65,6 +70,7 @@ CATALOG = {
         "apply.backup_ok": "Backup self-check: {bak} sha256={sha}… reads back identical ✓",
         "apply.fault_j": "⚠ Fault injected after_journal: journal written, file untouched, "
                          "database not committed",
+        "apply.batch_reused": "⛔ Batch {batch} already has apply or rollback audit rows; refusing reuse",
         "apply.fault_r": "⚠ Fault injected after_replace: file replaced, database rolled back; "
                          "run `somnians recover` to close the gap",
         "apply.db_fail": "⛔ Database write failed; transaction rolled back, original file untouched "
@@ -86,6 +92,10 @@ CATALOG = {
                       "is_deleted, which is weaker evidence",
         "rb.none": "Batch {batch} has no soft-delete rows; nothing changed",
         "rb.already": "Batch {batch} has already been rolled back; nothing changed",
+        "rb.missing": "⛔ Batch {batch} cannot be rolled back: records are missing {ids}; "
+                      "no rollback audit was written",
+        "batch.invalid": "⛔ Invalid batch name {batch!r}; use 1-128 chars matching "
+                         "[A-Za-z0-9][A-Za-z0-9._-]{{0,127}}, without '..'",
         "rb.fault": "Injected rollback failure; the records file and audit were restored",
         "rb.commit_fault": "Injected interruption after commit; the rollback is durable",
         "rb.done": "Batch {batch}: restored {n} row(s); the audit table stays "
@@ -138,6 +148,10 @@ CATALOG = {
         "scan.cap": "⚠ {n} 个高频 3-gram 超过 cap={cap} 已跳过（可能漏配）；"
                     "要完全一致请用 --exact 或调大 --cap",
         "scan.read": "读入 {n} 条，活条目 {live} 条；阈值 {thresh}；{mode}",
+        "input.open_fail": "打不开 {path}：{err}",
+        "input.bad_json": "{path} 第 {line} 行不是合法 JSON：{err}",
+        "input.bad_shape": "{path} 第 {line} 行不是 JSON 对象",
+        "input.missing_field": "{path} 第 {line} 行缺字段：{keys}",
         "scan.mode_exact": "全量比对（--exact）",
         "scan.mode_index": "3-gram 倒排缩候选",
         "scan.out": "候选 {n} 对 → {out}",
@@ -145,6 +159,7 @@ CATALOG = {
         "adj.r1": "第一轮：{got}/{ids} 组（并发 {jobs}）",
         "adj.r1_fail": "；失败 {n} 席",
         "adj.seat_fallback": "席位回退或不可用（痕迹：{traces}）；该席判决不计入",
+        "adj.adapter_error": "席位适配器启动失败：{err}",
         "adj.retry": "重试 {rd}：只补 {n} 组 → {ids}",
         "adj.retry_err": "  重试失败：{err}",
         "adj.out": "判决 {got}/{ids} 组 → {out}",
@@ -152,6 +167,7 @@ CATALOG = {
         "apply.backup_fail": "⛔ 备份自检失败：{bak} 读回与原文不一致，未改写入",
         "apply.backup_ok": "备份自检：{bak} sha256={sha}… 读回一致 ✓",
         "apply.fault_j": "⚠ 故障注入 after_journal：日志已写、文件未换、库未提交",
+        "apply.batch_reused": "⛔ 批次 {batch} 已有 apply 或 rollback 审计记录，拒绝重用",
         "apply.fault_r": "⚠ 故障注入 after_replace：文件已换、库回滚；请 somnians recover 补齐",
         "apply.db_fail": "⛔ 写库失败，已回滚事务；原文件未动（暂存件已删）",
         "apply.batch": "批次 {batch}：软删 {n} 条，跳过 {skipped} 组",
@@ -167,6 +183,8 @@ CATALOG = {
         "rec.legacy": "批次 {batch}：日志无指纹（旧格式）⇒ 退回按 is_deleted 判，证据较弱",
         "rb.none": "批次 {batch} 无软删记录，未改动",
         "rb.already": "批次 {batch} 已回滚，未改动",
+        "rb.missing": "⛔ 批次 {batch} 无法回滚：记录已缺失 {ids}；未写回滚审计",
+        "batch.invalid": "⛔ 批次名非法 {batch!r}；须为 1-128 位 [A-Za-z0-9][A-Za-z0-9._-]{{0,127}}，且不得含 '..'",
         "rb.fault": "注入回滚故障；记录文件与审计均已恢复",
         "rb.commit_fault": "注入提交后中断；回滚已持久提交",
         "rb.done": "批次 {batch} 已还原 {n} 条；审计表保留（op=rollback 留痕，不删记录）",
@@ -211,6 +229,10 @@ CATALOG = {
         "scan.cap": "⚠ {n} 個高頻 3-gram 超過 cap={cap} 已跳過（可能漏配）；"
                     "要完全一致請用 --exact 或調大 --cap",
         "scan.read": "讀入 {n} 條，活條目 {live} 條；閾值 {thresh}；{mode}",
+        "input.open_fail": "打不開 {path}：{err}",
+        "input.bad_json": "{path} 第 {line} 行不是合法 JSON：{err}",
+        "input.bad_shape": "{path} 第 {line} 行不是 JSON 物件",
+        "input.missing_field": "{path} 第 {line} 行缺欄位：{keys}",
         "scan.mode_exact": "全量比對（--exact）",
         "scan.mode_index": "3-gram 倒排縮候選",
         "scan.out": "候選 {n} 對 → {out}",
@@ -218,6 +240,7 @@ CATALOG = {
         "adj.r1": "第一輪：{got}/{ids} 組（並發 {jobs}）",
         "adj.r1_fail": "；失敗 {n} 席",
         "adj.seat_fallback": "席位回退或不可用（痕跡：{traces}）；該席判決不計入",
+        "adj.adapter_error": "席位適配器啟動失敗：{err}",
         "adj.retry": "重試 {rd}：只補 {n} 組 → {ids}",
         "adj.retry_err": "  重試失敗：{err}",
         "adj.out": "判決 {got}/{ids} 組 → {out}",
@@ -225,6 +248,7 @@ CATALOG = {
         "apply.backup_fail": "⛔ 備份自檢失敗：{bak} 讀回與原文不一致，未改寫入",
         "apply.backup_ok": "備份自檢：{bak} sha256={sha}… 讀回一致 ✓",
         "apply.fault_j": "⚠ 故障注入 after_journal：日誌已寫、檔案未換、庫未提交",
+        "apply.batch_reused": "⛔ 批次 {batch} 已有 apply 或 rollback 審計記錄，拒絕重用",
         "apply.fault_r": "⚠ 故障注入 after_replace：檔案已換、庫回滾；請 somnians recover 補齊",
         "apply.db_fail": "⛔ 寫庫失敗，已回滾交易；原檔案未動（暫存件已刪）",
         "apply.batch": "批次 {batch}：軟刪 {n} 條，跳過 {skipped} 組",
@@ -240,6 +264,8 @@ CATALOG = {
         "rec.legacy": "批次 {batch}：日誌無指紋（舊格式）⇒ 退回按 is_deleted 判，證據較弱",
         "rb.none": "批次 {batch} 無軟刪記錄，未改動",
         "rb.already": "批次 {batch} 已回滾，未改動",
+        "rb.missing": "⛔ 批次 {batch} 無法回滾：記錄已缺失 {ids}；未寫回滾審計",
+        "batch.invalid": "⛔ 批次名非法 {batch!r}；須為 1-128 位 [A-Za-z0-9][A-Za-z0-9._-]{{0,127}}，且不得含 '..'",
         "rb.fault": "注入回滾故障；記錄檔與審計均已恢復",
         "rb.commit_fault": "注入提交後中斷；回滾已持久提交",
         "rb.done": "批次 {batch} 已還原 {n} 條；審計表保留（op=rollback 留痕，不刪記錄）",

@@ -2,6 +2,20 @@
 
 `[English](CHANGELOG.md) · [中文](CHANGELOG.zh-CN.md)`
 
+## 0.1.7 — 2026-11-19
+
+- **A batch that already has audit rows cannot be reused**: `apply` refuses up front (exit code 2) when the batch already carries a `soft_delete` or `rollback` row, before any backup or staging file is created, so a retried or duplicate run cannot append a second soft-delete trail that would double-count on rollback.
+- **`apply` persistence barrier completed**: the journal is flushed and fsynced before the record file is replaced; after the atomic rename the containing directory is fsynced. The directory-sync helper is shared with `rollback`.
+- **Adapter start failure falls back to an empty verdict**: a missing seat command, a permission error or another `OSError`/`SubprocessError` no longer propagates out of the worker thread; the group is left missing for retry instead of crashing the whole round.
+- **Rollback refuses a batch whose records are gone**: when an audit row points at an ID that is no longer in the records file, `rollback` stops, rolls back the transaction and exits 2 without writing a rollback row or deleting the merge audit.
+- **Batch names are path-validated**: a batch must match `[A-Za-z0-9][A-Za-z0-9._-]{0,127}` and must not contain `..`; slashes, backslashes and newlines are rejected up front, so a batch name cannot reach outside the records directory.
+- **Group IDs parse past three digits**: the verdict parser now accepts `G1000` and above (`\d+`); the two/three-digit limit silently misread large stores as undecided.
+- **Staging files are cleaned on every exit**: an `after_journal` fault removes the staged file, and `recover` discards any leftover `.tmp-<batch>` on each of its discard / already / backfill exits.
+- **Command-line arguments are bounded**: `--thresh` must be within 0–1; `--cap`, `--jobs`, `--retry` must be ≥1; `--timeout` must be >0. Invalid values fail argument parsing instead of reaching the store.
+- **Input JSONL is validated before use**: a malformed JSON line, a non-object line or a missing required field is reported with file and line number and rejected with exit code 2, instead of raising a raw traceback.
+- **Undo keeps the original `merged_into`**: a record that was already folded into an earlier keeper records that original affiliation; rollback restores it rather than clearing the field. Older audit rows without the field keep the old clear-on-restore behaviour.
+- **Tests**: three new cases in `tests/test_cli.py` (22 total) — a malformed JSONL file is rejected before backup; a decision missing a field is rejected; rollback restores the original `merged_into`.
+
 ## 0.1.6 — 2026-11-19
 
 - **Brief fixes the roles first, with shape examples**: the adjudication brief opens by fixing `keeper` (kept) and `drop` (folded in), and the criterion now carries one positive and one negative shape example, so a seat cannot read "drop has fewer words" backwards as "keep apart".
