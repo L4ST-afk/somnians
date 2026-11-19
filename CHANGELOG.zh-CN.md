@@ -14,7 +14,8 @@
 - **命令行参数有边界**：`--thresh` 限 0–1；`--cap`/`--jobs`/`--retry` ≥1；`--timeout` >0。非法值在参数解析阶段拦下，不落到仓库上。
 - **输入 JSONL 先校验再使用**：坏 JSON、非对象行、缺必填字段都带文件名与行号报错、退出码 2，不再抛原始 traceback。
 - **undo 保留原始 `merged_into`**：此前已并入更早 keeper 的条目记下原归属；回滚时恢复原值，而不是清空字段。没有该字段的旧审计行沿用旧的「恢复时清空」行为。
-- **测试**：`tests/test_cli.py` 增 3 条（合计 22 条）——坏 JSONL 在备份前被拒；判决缺字段被拒；回滚恢复原始 `merged_into`。
+- **命令输出在 cp1252 控制台不崩**：`adjudicate`／`apply`／`recover`／`rollback` 的输出走与 `demo`／`selfcheck` 相同的编码兜底，✓ 或警告符号不会在 Windows cp1252 终端抛 `UnicodeEncodeError`。
+- **测试**：`tests/test_cli.py` 增 4 条（合计 23 条）——坏 JSONL 在备份前被拒；判决缺字段被拒；回滚恢复原始 `merged_into`；apply 成功路径扛得住 cp1252 stdout。
 
 ## 0.1.6（2026-11-19）
 

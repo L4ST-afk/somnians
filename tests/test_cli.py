@@ -3,6 +3,7 @@ import contextlib
 import io
 import json
 import os
+import sys
 import tempfile
 import unittest
 from argparse import Namespace
@@ -309,6 +310,32 @@ class CliBehaviorTests(unittest.TestCase):
                             if r["id"] == "drop")
             self.assertTrue(restored["is_deleted"])
             self.assertEqual(restored["merged_into"], "old-keeper")
+
+    def test_apply_success_output_survives_cp1252_stdout(self):
+        """Windows cp1252 控制台：apply 成功路径的 ✓/⚠ 不能把编码炸成 UnicodeEncodeError。"""
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            records = root / "records.jsonl"
+            self.write_records(records, [
+                {"id": "keeper", "text": "Keeper record here", "is_deleted": False},
+                {"id": "drop", "text": "Drop record here", "is_deleted": False},
+            ])
+            decisions = root / "decisions.jsonl"
+            decisions.write_text(json.dumps({
+                "group": "G01", "keeper": "keeper", "drop": "drop",
+                "score": 0.9, "verdict": "并",
+            }) + "\n", encoding="utf-8")
+            cp1252 = io.TextIOWrapper(io.BytesIO(), encoding="cp1252", errors="strict")
+            old_stdout = sys.stdout
+            sys.stdout = cp1252
+            try:
+                rc = cli.cmd_apply(Namespace(
+                    records=str(records), decisions=str(decisions),
+                    db=str(root / "audit.db"), batch="cp1252",
+                ))
+            finally:
+                sys.stdout = old_stdout
+            self.assertEqual(rc, 0)
 
     def write_records(self, path, records):
         path.write_text(

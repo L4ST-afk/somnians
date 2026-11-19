@@ -47,11 +47,12 @@ DATA = os.environ.get("SOMNIANS_DATA") or os.path.join(HERE, "data")
 SEATS = {"seat-a": "seat-a.txt", "seat-b": "seat-b.txt"}
 
 
-def _safe_print(text):
-    encoding = getattr(sys.stdout, "encoding", None)
+def _safe_print(text, file=None):
+    target = file or sys.stdout
+    encoding = getattr(target, "encoding", None)
     if encoding:
         text = text.encode(encoding, errors="backslashreplace").decode(encoding)
-    print(text)
+    print(text, file=target)
 
 
 # ---------------------------------------------------------------- 判据与解析
@@ -170,7 +171,7 @@ def _pairs_indexed(live, cap=500):
             idx.setdefault(g, []).append(k)
     skipped = [g for g, ks in idx.items() if len(ks) > cap]
     if skipped:
-        print(t("scan.cap", n=len(skipped), cap=cap), file=sys.stderr)
+        _safe_print(t("scan.cap", n=len(skipped), cap=cap), file=sys.stderr)
     n = len(live)
     seen = set()
     for g, ks in idx.items():
@@ -233,7 +234,7 @@ def _load_jsonl(path, required=()):
 def cmd_scan(args):
     recs, err = _load_jsonl(args.inp, ("id", "text"))
     if err:
-        print(err, file=sys.stderr)
+        _safe_print(err, file=sys.stderr)
         return 2
     live = [r for r in recs if not r.get("is_deleted")]
     _safe_print(t("scan.read", n=len(recs), live=len(live), thresh=args.thresh,
@@ -340,14 +341,14 @@ def _call_adapter(adapter, brief, timeout, ids):
 def cmd_adjudicate(args):
     cands, err = _load_jsonl(args.inp, ("group",))
     if err:
-        print(err, file=sys.stderr)
+        _safe_print(err, file=sys.stderr)
         return 2
     ids = {c["group"] for c in cands}
     brief = _brief_for(cands)
     if args.brief_out:
         open(args.brief_out, "w", encoding="utf-8").write(brief)
     if not args.adapter:
-        print(t("adj.brief", out=args.brief_out))
+        _safe_print(t("adj.brief", out=args.brief_out))
         return 0
 
     jobs = max(1, min(args.jobs, len(cands) or 1))
@@ -361,7 +362,7 @@ def cmd_adjudicate(args):
             got.update(v)
             if err:
                 notes.append(err)
-    print(t("adj.r1", got=len(got), ids=len(ids), jobs=jobs)
+    _safe_print(t("adj.r1", got=len(got), ids=len(ids), jobs=jobs)
           + (t("adj.r1_fail", n=len(notes)) if notes else ""))
 
     # 截断恢复：只把缺的组重发，最多 retry 轮
@@ -369,18 +370,18 @@ def cmd_adjudicate(args):
         miss = [c for c in cands if c["group"] not in got]
         if not miss:
             break
-        print(t("adj.retry", rd=rd, n=len(miss),
+        _safe_print(t("adj.retry", rd=rd, n=len(miss),
                 ids=", ".join(c["group"] for c in miss[:8])) + ("…" if len(miss) > 8 else ""))
         v, err = _call_adapter(args.adapter, _brief_for(miss), args.timeout,
                                {c["group"] for c in miss})
         got.update(v)
         if err:
-            print(t("adj.retry_err", err=err))
+            _safe_print(t("adj.retry_err", err=err))
     miss = sorted(ids - set(got))
     with open(args.out, "w", encoding="utf-8") as f:
         for c in cands:
             f.write(json.dumps({**c, "verdict": got.get(c["group"], "未判")}, ensure_ascii=False) + "\n")
-    print(t("adj.out", got=len(got), ids=len(ids), out=args.out)
+    _safe_print(t("adj.out", got=len(got), ids=len(ids), out=args.out)
           + (t("adj.out_miss", ids=", ".join(miss)) if miss else ""))
     return 0 if not miss else 2
 
@@ -416,7 +417,7 @@ def _validate_batch(batch):
 
 
 def _invalid_batch(batch):
-    print(t("batch.invalid", batch=batch), file=sys.stderr)
+    _safe_print(t("batch.invalid", batch=batch), file=sys.stderr)
     return 2
 
 
@@ -470,16 +471,16 @@ def cmd_apply(args):
         (batch,)).fetchone()
     con.close()
     if reused:
-        print(t("apply.batch_reused", batch=batch), file=sys.stderr)
+        _safe_print(t("apply.batch_reused", batch=batch), file=sys.stderr)
         return 2
 
     recs, err = _load_jsonl(args.records, ("id", "text"))
     if err:
-        print(err, file=sys.stderr)
+        _safe_print(err, file=sys.stderr)
         return 2
     decs, err = _load_jsonl(args.decisions, ("group", "keeper", "drop", "verdict"))
     if err:
-        print(err, file=sys.stderr)
+        _safe_print(err, file=sys.stderr)
         return 2
     by_id = {r["id"]: r for r in recs}
     merged, skipped = [], []
@@ -508,9 +509,9 @@ def cmd_apply(args):
         f.write(original)
     digest = hashlib.sha256(original).hexdigest()
     if hashlib.sha256(open(bak, "rb").read()).hexdigest() != digest:
-        print(t("apply.backup_fail", bak=bak), file=sys.stderr)
+        _safe_print(t("apply.backup_fail", bak=bak), file=sys.stderr)
         return 3
-    print(t("apply.backup_ok", bak=bak, sha=digest[:12]))
+    _safe_print(t("apply.backup_ok", bak=bak, sha=digest[:12]))
 
     # ② 先落暂存文件（不碰原文件）。payload 只序列化一次，正文与指纹同源
     staged = _staged_path(args.records, batch)
@@ -537,7 +538,7 @@ def cmd_apply(args):
     if _fault() == "after_journal":
         if os.path.exists(staged):
             os.unlink(staged)
-        print(t("apply.fault_j"), file=sys.stderr)
+        _safe_print(t("apply.fault_j"), file=sys.stderr)
         return 4
 
     con = _db(args.db)
@@ -556,22 +557,22 @@ def cmd_apply(args):
         if _fault() == "after_replace":
             con.rollback()
             con.close()
-            print(t("apply.fault_r"), file=sys.stderr)
+            _safe_print(t("apply.fault_r"), file=sys.stderr)
             return 4
         con.commit()
     except Exception:
         con.rollback()
         con.close()
         os.unlink(staged) if os.path.exists(staged) else None
-        print(t("apply.db_fail"), file=sys.stderr)
+        _safe_print(t("apply.db_fail"), file=sys.stderr)
         raise
     con.close()
     os.unlink(jpath)
 
-    print(t("apply.batch", batch=batch, n=len(merged), skipped=len(skipped))
+    _safe_print(t("apply.batch", batch=batch, n=len(merged), skipped=len(skipped))
           + (t("apply.batch_list", ids=", ".join(skipped[:6])) if skipped else ""))
-    print(t("apply.audit", db=args.db, bak=bak))
-    print(t("apply.undo", records=args.records, db=args.db, batch=batch))
+    _safe_print(t("apply.audit", db=args.db, bak=bak))
+    _safe_print(t("apply.undo", records=args.records, db=args.db, batch=batch))
     return 0
 
 
@@ -593,7 +594,7 @@ def cmd_recover(args):
         return _invalid_batch(args.batch)
     jpath = args.journal or _journal_path(args.records, args.batch)
     if not os.path.exists(jpath):
-        print(t("rec.none", jpath=jpath))
+        _safe_print(t("rec.none", jpath=jpath))
         return 0
     j = json.load(open(jpath, encoding="utf-8"))
     if not _validate_batch(j.get("batch")):
@@ -606,7 +607,7 @@ def cmd_recover(args):
         con.close()
         os.unlink(jpath)
         _discard_staged(args.records, j["batch"])
-        print(t("rec.already", batch=j["batch"], n=done))
+        _safe_print(t("rec.already", batch=j["batch"], n=done))
         return 0
 
     pre, post = j.get("pre_sha"), j.get("post_sha")
@@ -618,9 +619,9 @@ def cmd_recover(args):
             con.close()
             os.unlink(jpath)
             _discard_staged(args.records, j["batch"])
-            print(t("rec.discard", batch=j["batch"], n=len(j["merges"])))
+            _safe_print(t("rec.discard", batch=j["batch"], n=len(j["merges"])))
             return 0
-        print(t("rec.legacy", batch=j["batch"]))
+        _safe_print(t("rec.legacy", batch=j["batch"]))
     else:
         now_sha = _sha256_bytes(open(args.records, "rb").read())
         if now_sha == post:
@@ -629,11 +630,11 @@ def cmd_recover(args):
             con.close()
             os.unlink(jpath)
             _discard_staged(args.records, j["batch"])
-            print(t("rec.discard", batch=j["batch"], n=len(j["merges"])))
+            _safe_print(t("rec.discard", batch=j["batch"], n=len(j["merges"])))
             return 0
         else:
             con.close()
-            print(t("rec.refuse", batch=j["batch"], jpath=jpath), file=sys.stderr)
+            _safe_print(t("rec.refuse", batch=j["batch"], jpath=jpath), file=sys.stderr)
             return 5
 
     now = time.strftime("%Y-%m-%dT%H:%M:%S")
@@ -647,7 +648,7 @@ def cmd_recover(args):
     con.close()
     os.unlink(jpath)
     _discard_staged(args.records, j["batch"])
-    print(t("rec.backfill", batch=j["batch"], n=len(touched)))
+    _safe_print(t("rec.backfill", batch=j["batch"], n=len(touched)))
     return 0
 
 
@@ -686,14 +687,14 @@ def cmd_rollback(args):
         if not rows:
             con.rollback()
             con.close()
-            print(t("rb.none", batch=args.batch))
+            _safe_print(t("rb.none", batch=args.batch))
             return 1
         if con.execute(
                 "SELECT 1 FROM audit_change WHERE op='rollback' AND batch=? LIMIT 1",
                 (args.batch,)).fetchone():
             con.rollback()
             con.close()
-            print(t("rb.already", batch=args.batch))
+            _safe_print(t("rb.already", batch=args.batch))
             return 0
 
         with open(args.records, "rb") as f:
@@ -702,14 +703,14 @@ def cmd_rollback(args):
         if err:
             con.rollback()
             con.close()
-            print(err, file=sys.stderr)
+            _safe_print(err, file=sys.stderr)
             return 2
         by_id = {r["id"]: r for r in recs}
         missing = [old for old, _, _ in rows if old not in by_id]
         if missing:
             con.rollback()
             con.close()
-            print(t("rb.missing", batch=args.batch, ids=", ".join(missing)), file=sys.stderr)
+            _safe_print(t("rb.missing", batch=args.batch, ids=", ".join(missing)), file=sys.stderr)
             return 2
         n = 0
         for old, undo_json, b in rows:
@@ -793,10 +794,10 @@ def cmd_rollback(args):
                 f"rollback file restored, but the SQLite transaction could not be rolled back: "
                 f"{rollback_error}") from rollback_error
         if post_commit_fault and committed:
-            print(t("rb.commit_fault"), file=sys.stderr)
+            _safe_print(t("rb.commit_fault"), file=sys.stderr)
             return 4
         if fault_injected:
-            print(t("rb.fault"), file=sys.stderr)
+            _safe_print(t("rb.fault"), file=sys.stderr)
             return 4
         raise
     finally:
@@ -804,7 +805,7 @@ def cmd_rollback(args):
             if path and os.path.exists(path):
                 os.unlink(path)
 
-    print(t("rb.done", batch=args.batch, n=n))
+    _safe_print(t("rb.done", batch=args.batch, n=n))
     return 0
 
 
@@ -860,7 +861,7 @@ def cmd_selfcheck(args):
     line(bool(live) and idx == exc, t("sc.index", n=len(exc)))
 
     if not live:
-        print(t("sc.missing"))
+        _safe_print(t("sc.missing"))
         return 1
 
     with tempfile.TemporaryDirectory() as d:
@@ -1084,7 +1085,7 @@ def main():
     lang, warn = resolve_lang(args.lang)
     set_lang(lang)
     if warn:
-        print(t(warn[0], tag=warn[1]), file=sys.stderr)
+        _safe_print(t(warn[0], tag=warn[1]), file=sys.stderr)
     return {"demo": cmd_demo, "scan": cmd_scan, "adjudicate": cmd_adjudicate,
             "apply": cmd_apply, "rollback": cmd_rollback,
             "recover": cmd_recover, "selfcheck": cmd_selfcheck}[args.cmd](args)

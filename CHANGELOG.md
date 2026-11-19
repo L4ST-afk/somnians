@@ -14,7 +14,8 @@
 - **Command-line arguments are bounded**: `--thresh` must be within 0–1; `--cap`, `--jobs`, `--retry` must be ≥1; `--timeout` must be >0. Invalid values fail argument parsing instead of reaching the store.
 - **Input JSONL is validated before use**: a malformed JSON line, a non-object line or a missing required field is reported with file and line number and rejected with exit code 2, instead of raising a raw traceback.
 - **Undo keeps the original `merged_into`**: a record that was already folded into an earlier keeper records that original affiliation; rollback restores it rather than clearing the field. Older audit rows without the field keep the old clear-on-restore behaviour.
-- **Tests**: three new cases in `tests/test_cli.py` (22 total) — a malformed JSONL file is rejected before backup; a decision missing a field is rejected; rollback restores the original `merged_into`.
+- **Command output survives cp1252 consoles**: `adjudicate` / `apply` / `recover` / `rollback` output now goes through the same encoding fallback as `demo` and `selfcheck`, so a `✓` or warning symbol cannot raise `UnicodeEncodeError` on a Windows cp1252 terminal.
+- **Tests**: four new cases in `tests/test_cli.py` (23 total) — a malformed JSONL file is rejected before backup; a decision missing a field is rejected; rollback restores the original `merged_into`; an apply success path survives a cp1252 stdout.
 
 ## 0.1.6 — 2026-11-19
 
