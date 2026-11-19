@@ -2,6 +2,12 @@
 
 `[English](CHANGELOG.md) · [中文](CHANGELOG.zh-CN.md)`
 
+## 0.1.6 — 2026-11-19
+
+- **Brief fixes the roles first, with shape examples**: the adjudication brief opens by fixing `keeper` (kept) and `drop` (folded in), and the criterion now carries one positive and one negative shape example, so a seat cannot read "drop has fewer words" backwards as "keep apart".
+- **Seat identity check**: `adjudicate` scans the seat's output and stderr for fallback / unavailable traces (model not available, using auto, insufficient quota, 402, insufficient balance). A matching seat's verdicts are discarded and its groups are left missing for retry; the trace is reported in the round output instead of being counted under a model that never answered.
+- **Tests**: two new cases in `tests/test_cli.py` (13 total) — a fallback-trace seat drops its verdicts; a normal seat is not flagged.
+
 ## 0.1.5 — 2026-11-18
 
 - **Windows keeps CRLF files intact**: `apply` now hashes and backs up the records file as raw bytes. Before, it read and rewrote the file as text, so a CRLF file lost its line endings on the way through and the backup digest never matched the rewritten digest — `selfcheck` failed on files that were fine. The same byte-level rule now covers the staged file and the fingerprint written into the journal, so `recover` compares like with like.

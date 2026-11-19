@@ -52,6 +52,8 @@ That single T10 disagreement is worth a second look: the seat that merged it tre
 
 ## One criterion
 
+**In every pair, `keeper` (the longer / fuller entry) is kept; `drop` folds into `keeper`.**
+
 **The cost of a merge = the information in `drop` that `keeper` does not have.**
 
 - `drop` has **more** than `keeper` (a qualifier, an exception, a second object, a different value, an opposite tone) ⇒ **keep apart**
@@ -208,6 +210,10 @@ When retries run out and groups are still missing: **exit code 2**, and those gr
 
 `--jobs 3` splits candidates by group and dispatches concurrently; the seats do not affect each other. A single seat's timeout is handled by `--timeout`.
 
+## Seat identity
+
+A seat command can silently fall back to a default model (quota exhausted, endpoint unavailable, "using auto"). `adjudicate` scans the seat's output and stderr for those traces; if one matches, the seat's verdicts are **not counted** and the group is left missing for a retry, rather than recorded under a model that never actually answered. The trace is reported in the round output.
+
 ## Files
 
 CI runs the standard-library unit suite, `selfcheck`, the offline demo, and indexed-vs-exact reconciliation on Ubuntu, macOS, and Windows with Python 3.9, 3.11, and 3.13. The `quality-gate` check is the single aggregate status for the full matrix.
@@ -246,6 +252,8 @@ Every identifier stays ASCII — see the naming table in [CONTRIBUTING.md](CONTR
 ## Where the criterion came from
 
 The criterion and the pre-filter both come from one real incident on 2026-11-17: two of four seats read "drop is missing a word" as "keep apart" (direction reversed), and chatter like `全批。` got merged into body text. Both became canaries. **The failing cases in the gold set are pitfalls already stepped in, not invented exercises.**
+
+The seat-identity check comes from a second incident: a seat labeled a named model silently fell back to the default model (quota exhausted, endpoint unavailable), and its verdicts were counted under the label that never actually answered.
 
 ## When to come back and edit this file
 

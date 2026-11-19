@@ -227,7 +227,7 @@ def cmd_scan(args):
 
 # ---------------------------------------------------------------- adjudicate
 
-BRIEF_HEAD = """你在判「两条记忆条目该不该并成一条」。逐组判决，不要解释。
+BRIEF_HEAD = """你在判「两条记忆条目该不该并成一条」。**每组保留 keeper（更长/更全的那条），drop 并入 keeper**；逐组判决，不要解释。
 
 ## 第一步：先过滤「根本不是条目」的东西
 批注/状态词（全批、同意、收到、OK、负一：…）、归一化后不足 8 字且无谓语、
@@ -238,6 +238,9 @@ BRIEF_HEAD = """你在判「两条记忆条目该不该并成一条」。逐组�
 并的代价 = **丢掉 drop 里 keeper 没有的信息**。
 - drop 比 keeper 多东西（一条限定/例外/并列对象/不同数值/相反语气）⇒ 不并
 - drop 比 keeper 少东西（压缩写法/残句/缺修饰/词序不同/多一个介词）⇒ 并
+
+例（并）：drop 只是 keeper 的压缩/残句/缺修饰，keeper 里那个词还在 ⇒ 子集，可并。
+例（不并）：drop 多一条时间/条件/例外/对象/数值/相反语气 ⇒ 并了会丢这条限定。
 
 ⛔ 别按「两条像不像」判。⛔ 别把「drop 缺词」当成「不并」的理由——那是方向读反。
 
@@ -265,6 +268,21 @@ def _decode(b):
     return b.decode("utf-8", "replace")
 
 
+# 席位静默回退/不可用的痕迹：标称模型名不可信，网关可退回默认模型。
+# 命中任一条 ⇒ 该席判决不计入，不把身份不明的读数当成指定模型的判断。
+_FALLBACK_PATTERNS = (
+    "not available", 'using "auto"', "using auto",
+    "insufficient_quota", "insufficient quota", "status 402",
+    "积分余额不足", "模型不可用",
+)
+
+
+def _fallback_trace(text):
+    """返回回执里命中的回退/不可用痕迹；空列表＝席位身份可信。"""
+    low = (text or "").lower()
+    return [p for p in _FALLBACK_PATTERNS if p.lower() in low]
+
+
 def _call_adapter(adapter, brief, timeout, ids):
     """调一次席位；失败/超时回空字典（调用方据此走重试）。"""
     fd, path = tempfile.mkstemp(suffix=".md", prefix="somnians-brief-")
@@ -275,6 +293,9 @@ def _call_adapter(adapter, brief, timeout, ids):
         out, err = _decode(r.stdout), _decode(r.stderr)
         if r.returncode != 0:
             return {}, (err or "")[-300:]
+        trace = _fallback_trace(out + "\n" + err)
+        if trace:
+            return {}, t("adj.seat_fallback", traces=", ".join(trace))
         return parse_verdicts(out, ids), ""
     except subprocess.TimeoutExpired:
         return {}, "超时"

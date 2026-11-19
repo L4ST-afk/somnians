@@ -6,7 +6,7 @@ import tempfile
 import unittest
 from argparse import Namespace
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 from somnians import cli
 
@@ -30,6 +30,23 @@ class CliBehaviorTests(unittest.TestCase):
             cli.parse_verdicts("G01｜不并\nG02｜并\nG03｜不合并", {"G01", "G02", "G03"}),
             {"G01": "不并", "G02": "并", "G03": "不并"},
         )
+
+    def test_seat_fallback_trace_drops_verdicts(self):
+        """标称模型静默回退 auto：回执里的判决不计入，只留失效提示。"""
+        proc = Mock(returncode=0,
+                    stdout='Model "GLM-5.2" is not available; using "auto" instead\nG01｜并',
+                    stderr="")
+        with patch("somnians.cli.subprocess.run", return_value=proc):
+            got, note = cli._call_adapter(["seat.sh"], "brief", 30, {"G01"})
+        self.assertEqual(got, {})
+        self.assertIn("not available", note)
+
+    def test_normal_seat_is_not_flagged(self):
+        proc = Mock(returncode=0, stdout="G01｜并", stderr="")
+        with patch("somnians.cli.subprocess.run", return_value=proc):
+            got, note = cli._call_adapter(["seat.sh"], "brief", 30, {"G01"})
+        self.assertEqual(got, {"G01": "并"})
+        self.assertEqual(note, "")
 
     def test_indexed_pairs_match_exact_pairs(self):
         records = [
