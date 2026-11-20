@@ -280,4 +280,4 @@ CHANGELOG.zh-CN.md          # CHANGELOG 的中文原稿
 
 ---
 
-© 2026 L4ST-afk · [@L4ST-afk](https://github.com/L4ST-afk) · MIT License
+© 2026 作者 · [@L4ST-afk](https://github.com/L4ST-afk) · MIT License

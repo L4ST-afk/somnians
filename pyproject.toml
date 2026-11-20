@@ -7,7 +7,7 @@ name = "somnians"
 version = "0.1.7"
 description = "In-place deduplication for agent memory: scan, adjudicate, soft-delete in one transaction, roll back by batch"
 readme = "README.md"
-authors = [{ name = "L4ST-afk" }]
+authors = [{ name = "Author" }]
 requires-python = ">=3.9"
 license = { text = "MIT" }
 keywords = ["memory", "deduplication", "agent-memory", "audit", "rollback", "cli", "sqlite"]
