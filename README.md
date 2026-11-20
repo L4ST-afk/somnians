@@ -277,4 +277,4 @@ The seat-identity check comes from a second incident: a seat labeled a named mod
 
 ---
 
-© 2026 作者 · [@L4ST-afk](https://github.com/L4ST-afk) · MIT License
+© 2026 L4ST-afk · MIT License
